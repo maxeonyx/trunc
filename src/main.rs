@@ -2,9 +2,13 @@
 //!
 //! Shows the first N and last M lines of stdin, with an optional
 //! pattern-matching mode that extracts matches from the middle.
+//!
+//! Streams output: first lines appear immediately, matches stream as found,
+//! only the tail waits for EOF.
 
 use clap::Parser;
 use regex::Regex;
+use std::collections::VecDeque;
 use std::io::{self, BufRead, Write};
 use std::process;
 
@@ -51,13 +55,6 @@ struct Args {
     pattern: Option<String>,
 }
 
-/// A line with its original line number (1-indexed)
-#[derive(Clone, Debug)]
-struct Line {
-    number: usize,
-    content: String,
-}
-
 /// Truncate a line if it's too long
 fn truncate_line(line: &str, width: usize) -> String {
     if width == 0 {
@@ -80,7 +77,7 @@ fn main() {
     let args = Args::parse();
 
     // Compile regex if provided
-    let pattern = match &args.pattern {
+    let pattern: Option<Regex> = match &args.pattern {
         Some(p) => match Regex::new(p) {
             Ok(re) => Some(re),
             Err(e) => {
@@ -94,9 +91,30 @@ fn main() {
     let stdin = io::stdin();
     let mut stdout = io::stdout().lock();
 
-    // Collect all lines with their line numbers
-    let mut all_lines: Vec<Line> = Vec::new();
-    for (i, line_result) in stdin.lock().lines().enumerate() {
+    let first_count = args.first;
+    let last_count = args.last;
+    let context_size = args.context;
+    let max_matches = args.matches;
+    let width = args.width;
+
+    // State tracking
+    let mut line_number: usize = 0;
+    let mut head_output_count: usize = 0;
+    let mut in_middle = false;
+    let mut matches_found: usize = 0;
+    let mut printed_matches_header = false;
+    let mut last_output_line: usize = 0; // Track the last line number we output
+
+    // Ring buffer for tail
+    let mut tail_buffer: VecDeque<(usize, String)> = VecDeque::with_capacity(last_count + 1);
+
+    // Context buffer for pattern mode - holds recent lines for "before" context
+    let mut context_buffer: VecDeque<(usize, String)> = VecDeque::with_capacity(context_size + 1);
+
+    // Track pending "after" context
+    let mut after_context_remaining: usize = 0;
+
+    for line_result in stdin.lock().lines() {
         let content = match line_result {
             Ok(l) => l,
             Err(e) => {
@@ -104,162 +122,139 @@ fn main() {
                 process::exit(1);
             }
         };
-        all_lines.push(Line {
-            number: i + 1,
-            content,
-        });
+
+        line_number += 1;
+        let truncated = truncate_line(&content, width);
+
+        // Phase 1: Output head lines immediately
+        if head_output_count < first_count {
+            let _ = writeln!(stdout, "{}", truncated);
+            let _ = stdout.flush();
+            head_output_count += 1;
+            last_output_line = line_number;
+            continue;
+        }
+
+        // We're now in the middle section
+        if !in_middle {
+            in_middle = true;
+        }
+
+        // Always maintain tail buffer
+        tail_buffer.push_back((line_number, content.clone()));
+        if tail_buffer.len() > last_count {
+            tail_buffer.pop_front();
+        }
+
+        // Pattern mode: look for matches and stream them
+        if let Some(ref re) = pattern {
+            // Are we still outputting "after" context from a previous match?
+            if after_context_remaining > 0 {
+                // Check if this line overlaps with tail - if so, skip (will be in tail)
+                // We can't know tail boundaries yet, so just output it
+                // But avoid duplicates - only output if we haven't output this line
+                if line_number > last_output_line {
+                    let _ = writeln!(stdout, "{}", truncated);
+                    let _ = stdout.flush();
+                    last_output_line = line_number;
+                }
+                after_context_remaining -= 1;
+            }
+
+            // Check for match (only if we haven't hit max matches)
+            // Note: we check BEFORE adding to context buffer, so context_buffer
+            // contains only lines *before* the current line
+            if matches_found < max_matches && re.is_match(&content) {
+                matches_found += 1;
+
+                // Track if this is NOT the first match (for gap detection)
+                let had_previous_match = printed_matches_header;
+
+                // Print matches header if first match
+                if !printed_matches_header {
+                    let _ = writeln!(stdout, "[... matches follow ...]");
+                    let _ = stdout.flush();
+                    printed_matches_header = true;
+                }
+
+                // Check if we need [...] separator (gap between last output and this match context)
+                // Only needed if we already printed a previous match - the "[... matches follow ...]"
+                // header already serves as separator from head
+                let context_start = line_number.saturating_sub(context_size);
+                if had_previous_match && context_start > last_output_line + 1 {
+                    let _ = writeln!(stdout, "[...]");
+                    let _ = stdout.flush();
+                }
+
+                // Output "before" context (lines we haven't already output)
+                for (ctx_line_num, ctx_content) in &context_buffer {
+                    if *ctx_line_num > last_output_line && *ctx_line_num < line_number {
+                        let _ = writeln!(stdout, "{}", truncate_line(ctx_content, width));
+                        last_output_line = *ctx_line_num;
+                    }
+                }
+
+                // Output the match line itself (if not already output)
+                if line_number > last_output_line {
+                    let _ = writeln!(stdout, "{}", truncated);
+                    let _ = stdout.flush();
+                    last_output_line = line_number;
+                }
+
+                // Set up "after" context
+                after_context_remaining = context_size;
+            }
+
+            // Maintain context buffer for "before" context (add AFTER checking for match)
+            context_buffer.push_back((line_number, content.clone()));
+            if context_buffer.len() > context_size {
+                context_buffer.pop_front();
+            }
+        }
     }
 
-    let total_lines = all_lines.len();
+    // EOF reached - now output tail
+
+    let total_lines = line_number;
 
     // Handle empty input
     if total_lines == 0 {
         return;
     }
 
-    // Determine which line numbers belong to which section
-    let first_count = args.first;
-    let last_count = args.last;
-
-    // Calculate boundaries
-    let head_end = first_count.min(total_lines);
+    // Calculate where tail starts
     let tail_start = if total_lines > last_count {
         total_lines - last_count + 1
     } else {
         1
     };
 
-    // Check if we need truncation at all
+    // Determine if we need any separator before tail
     let needs_truncation = total_lines > first_count + last_count;
 
-    if !needs_truncation && pattern.is_none() {
-        // Output all lines unchanged
-        for line in &all_lines {
-            let _ = writeln!(stdout, "{}", truncate_line(&line.content, args.width));
-        }
-        return;
-    }
-
-    // Pattern mode
-    if let Some(ref re) = pattern {
-        // Find matches in the middle section (not in head or tail)
-        let mut match_line_numbers: Vec<usize> = Vec::new();
-
-        for line in &all_lines {
-            // Only look for matches in lines that are NOT in head or tail
-            let in_head = line.number <= head_end;
-            let in_tail = line.number >= tail_start;
-
-            if !in_head && !in_tail && re.is_match(&line.content) {
-                match_line_numbers.push(line.number);
-                if match_line_numbers.len() >= args.matches {
-                    break;
-                }
-            }
-        }
-
-        // Build regions to output: head, match contexts, tail
-        // We track which lines are match context
-        let mut is_match_context: Vec<bool> = vec![false; total_lines];
-
-        // Mark match context lines
-        for &match_num in &match_line_numbers {
-            let start = match_num.saturating_sub(args.context);
-            let end = (match_num + args.context).min(total_lines);
-            for i in start..=end {
-                if i >= 1 && i <= total_lines {
-                    is_match_context[i - 1] = true;
-                }
-            }
-        }
-
-        // Now output in order
-        // Structure: head, [... matches follow ...], matches with [...] between groups, [... matches end ...], tail
-
-        // Output head
-        for line in all_lines.iter().take(head_end) {
-            let _ = writeln!(stdout, "{}", truncate_line(&line.content, args.width));
-        }
-
-        // Find match context regions (contiguous groups of match context lines)
-        // that are NOT already in head or tail
-        let mut match_regions: Vec<(usize, usize)> = Vec::new(); // (start, end) inclusive, 1-indexed
-        let mut in_region = false;
-        let mut region_start = 0;
-
-        for (i, &is_match) in is_match_context.iter().enumerate() {
-            let line_num = i + 1;
-            let in_head = line_num <= head_end;
-            let in_tail = line_num >= tail_start;
-            let in_middle_match = is_match && !in_head && !in_tail;
-
-            if in_middle_match && !in_region {
-                in_region = true;
-                region_start = line_num;
-            } else if !in_middle_match && in_region {
-                in_region = false;
-                match_regions.push((region_start, line_num - 1));
-            }
-        }
-        if in_region {
-            match_regions.push((region_start, total_lines));
-        }
-
-        // If there are matches to show in the middle
-        if !match_regions.is_empty() {
-            let _ = writeln!(stdout, "[... matches follow ...]");
-
-            for (region_idx, &(start, end)) in match_regions.iter().enumerate() {
-                // Add [...] between non-contiguous match groups
-                if region_idx > 0 {
-                    let prev_end = match_regions[region_idx - 1].1;
-                    if start > prev_end + 1 {
-                        let _ = writeln!(stdout, "[...]");
-                    }
-                }
-
-                for line_num in start..=end {
-                    let line = &all_lines[line_num - 1];
-                    let _ = writeln!(stdout, "{}", truncate_line(&line.content, args.width));
-                }
-            }
-
-            // Only show "[... matches end ...]" if there's a gap before tail
-            let last_region_end = match_regions.last().map(|r| r.1).unwrap_or(0);
-            if last_region_end + 1 < tail_start {
+    if pattern.is_some() {
+        // Pattern mode
+        if printed_matches_header {
+            // We printed matches - check if we need "[... matches end ...]"
+            // Only if there's a gap between last output and tail
+            if last_output_line + 1 < tail_start {
                 let _ = writeln!(stdout, "[... matches end ...]");
             }
         } else if needs_truncation {
-            // No matches in middle - fall back to simple truncation marker
+            // No matches found in middle - use simple truncation marker
             let _ = writeln!(stdout, "[... truncated ...]");
-        }
-
-        // Output tail (only lines not already in head)
-        for line in all_lines.iter().skip(tail_start - 1) {
-            if line.number > head_end {
-                let _ = writeln!(stdout, "{}", truncate_line(&line.content, args.width));
-            }
         }
     } else {
         // Default mode (no pattern)
-        if !needs_truncation {
-            // Already handled above, but just in case
-            for line in &all_lines {
-                let _ = writeln!(stdout, "{}", truncate_line(&line.content, args.width));
-            }
-            return;
+        if needs_truncation {
+            let _ = writeln!(stdout, "[... truncated ...]");
         }
+    }
 
-        // Output head
-        for line in all_lines.iter().take(head_end) {
-            let _ = writeln!(stdout, "{}", truncate_line(&line.content, args.width));
-        }
-
-        let _ = writeln!(stdout, "[... truncated ...]");
-
-        // Output tail
-        for line in all_lines.iter().skip(tail_start - 1) {
-            let _ = writeln!(stdout, "{}", truncate_line(&line.content, args.width));
+    // Output tail (only lines not already output)
+    for (tail_line_num, tail_content) in &tail_buffer {
+        if *tail_line_num > last_output_line && *tail_line_num > first_count {
+            let _ = writeln!(stdout, "{}", truncate_line(tail_content, width));
         }
     }
 }
