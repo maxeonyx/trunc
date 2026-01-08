@@ -1,32 +1,25 @@
 # trunc - TODO
 
-## Phase 1: Specification (Current)
+## Completed
 
 - [x] Create repository
 - [x] Write VISION.md
-- [x] Write comprehensive E2E tests (51 failing tests)
-- [x] Create stub implementation that compiles but fails tests
+- [x] Write comprehensive E2E tests
+- [x] Implement CLI argument parsing (clap)
+- [x] Implement line truncation (-w/--width)
+- [x] Implement basic truncation (first + last)
+- [x] Handle edge cases (short input, exact boundary, trailing newlines)
+- [x] Implement pattern matching mode with context
+- [x] Handle overlapping regions (no duplicate lines)
 - [x] Set up CI (GitHub Actions)
-- [x] Set up release pipeline
+- [x] Publish v0.1.0 via GitHub releases
 
-## Phase 2: Implementation
+## Current: Streaming Output
 
-- [ ] Add CLI argument parsing (clap)
-- [ ] Implement line truncation (-w/--width)
-- [ ] Implement basic truncation (first + last)
-- [ ] Handle edge cases (short input, exact boundary, trailing newlines)
-- [ ] Implement pattern matching mode
-- [ ] Implement context around matches
-- [ ] Implement match limit
-- [ ] Handle overlapping regions (no duplicate lines)
-- [ ] Add ellipsis separators between non-contiguous sections
-
-## Phase 3: Polish
-
-- [ ] Performance testing with large inputs
-- [ ] Error handling and edge cases
-- [ ] Release to crates.io
-- [ ] Publish binaries via GitHub releases
+- [ ] Stream first N lines immediately as they arrive
+- [ ] Stream matches (with context) as they are found
+- [ ] Only buffer the last M lines (ring buffer)
+- [ ] Tests: `streaming::first_lines_stream_immediately`, `streaming::matches_stream_as_they_arrive`
 
 ## Future Ideas
 

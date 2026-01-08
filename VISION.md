@@ -67,9 +67,10 @@ Calculation:
 ## Design Principles
 
 1. **Fast and simple.** Single binary, minimal dependencies, streams input.
-2. **Predictable output size.** The user can calculate max output before running.
-3. **Zero config for common case.** Defaults are sensible; options are rare.
-4. **Grep-compatible patterns.** Regex syntax should feel familiar.
+2. **Streaming output.** First lines appear immediately; matches stream as found. Only the tail must wait for EOF.
+3. **Predictable output size.** The user can calculate max output before running.
+4. **Zero config for common case.** Defaults are sensible; options are rare.
+5. **Grep-compatible patterns.** Regex syntax should feel familiar.
 
 ## Non-Goals
 

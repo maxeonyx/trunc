@@ -1204,3 +1204,157 @@ mod output_size {
         );
     }
 }
+
+// =============================================================================
+// STREAMING BEHAVIOR
+// =============================================================================
+
+mod streaming {
+    use std::io::{BufRead, BufReader, Write};
+    use std::process::{Command, Stdio};
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    /// Get path to the trunc binary
+    fn trunc_bin() -> std::path::PathBuf {
+        assert_cmd::cargo::cargo_bin("trunc")
+    }
+
+    #[test]
+    fn first_lines_stream_immediately() {
+        // Spawn trunc and feed it lines slowly
+        // The first 10 lines should appear on stdout BEFORE we send more input
+        let mut child = Command::new(trunc_bin())
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .expect("Failed to spawn trunc");
+
+        let mut stdin = child.stdin.take().expect("Failed to open stdin");
+        let stdout = child.stdout.take().expect("Failed to open stdout");
+
+        // Start a reader thread that sends lines to a channel as they arrive
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let reader = BufReader::new(stdout);
+            for line in reader.lines() {
+                if let Ok(l) = line {
+                    let _ = tx.send(l);
+                }
+            }
+        });
+
+        // Send first 10 lines
+        for i in 1..=10 {
+            writeln!(stdin, "line {}", i).unwrap();
+        }
+        stdin.flush().unwrap();
+
+        // Wait briefly for trunc to process
+        std::thread::sleep(Duration::from_millis(100));
+
+        // Check what we've received SO FAR (stdin is still open!)
+        let mut received_before_more_input = Vec::new();
+        while let Ok(line) = rx.try_recv() {
+            received_before_more_input.push(line);
+        }
+
+        // We should have received the first 10 lines already
+        assert!(
+            received_before_more_input.len() >= 10,
+            "First 10 lines should stream immediately before more input. \
+             Got {} lines while stdin still open: {:?}",
+            received_before_more_input.len(),
+            received_before_more_input
+        );
+
+        // Now send the rest and close
+        for i in 11..=100 {
+            writeln!(stdin, "line {}", i).unwrap();
+        }
+        drop(stdin);
+
+        let _ = child.wait();
+    }
+
+    #[test]
+    fn matches_stream_as_they_arrive() {
+        // In pattern mode, matches should stream as they're found
+        // We verify by checking output arrives BEFORE stdin is closed
+        let mut child = Command::new(trunc_bin())
+            .arg("ERROR")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .expect("Failed to spawn trunc");
+
+        let mut stdin = child.stdin.take().expect("Failed to open stdin");
+        let stdout = child.stdout.take().expect("Failed to open stdout");
+
+        // Start reader thread
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let reader = BufReader::new(stdout);
+            for line in reader.lines() {
+                if let Ok(l) = line {
+                    let _ = tx.send(l);
+                }
+            }
+        });
+
+        // Send first 10 lines (head section)
+        for i in 1..=10 {
+            writeln!(stdin, "line {}", i).unwrap();
+        }
+        stdin.flush().unwrap();
+        std::thread::sleep(Duration::from_millis(50));
+
+        // Check head lines arrived
+        let mut received = Vec::new();
+        while let Ok(line) = rx.try_recv() {
+            received.push(line);
+        }
+        assert!(
+            received.len() >= 10,
+            "Head lines should stream immediately. Got {} lines: {:?}",
+            received.len(),
+            received
+        );
+
+        // Now send middle lines with a match at line 25
+        for i in 11..=24 {
+            writeln!(stdin, "line {}", i).unwrap();
+        }
+        writeln!(stdin, "line 25 contains ERROR").unwrap();
+        // Send context after the match
+        for i in 26..=28 {
+            writeln!(stdin, "line {}", i).unwrap();
+        }
+        stdin.flush().unwrap();
+        std::thread::sleep(Duration::from_millis(100));
+
+        // Check that match has streamed (stdin still open!)
+        while let Ok(line) = rx.try_recv() {
+            received.push(line);
+        }
+
+        let has_matches_marker = received.iter().any(|l| l.contains("matches follow"));
+        let has_error_line = received.iter().any(|l| l.contains("ERROR"));
+
+        assert!(
+            has_matches_marker,
+            "Matches marker should stream before stdin closes. Got: {:?}",
+            received
+        );
+        assert!(
+            has_error_line,
+            "Match line should stream before stdin closes. Got: {:?}",
+            received
+        );
+
+        // Close stdin and wait
+        drop(stdin);
+        let _ = child.wait();
+    }
+}
+
