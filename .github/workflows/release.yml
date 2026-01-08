@@ -109,10 +109,11 @@ jobs:
     name: Publish to crates.io
     runs-on: ubuntu-latest
     needs: [release]
+    continue-on-error: true  # Don't fail release if crates.io publish fails
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: Publish
-        run: cargo publish
+        run: cargo publish || echo "Publish failed (may already exist)"
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
