@@ -9,6 +9,8 @@ keywords = ["cli", "head", "tail", "truncate", "pipe"]
 categories = ["command-line-utilities"]
 
 [dependencies]
+clap = { version = "4", features = ["derive"] }
+regex = "1"
 
 [dev-dependencies]
 assert_cmd = "2"

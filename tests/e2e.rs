@@ -13,7 +13,10 @@ fn trunc() -> Command {
 
 /// Generate N lines of input: "line 1\nline 2\n..."
 fn generate_lines(n: usize) -> String {
-    (1..=n).map(|i| format!("line {}", i)).collect::<Vec<_>>().join("\n")
+    (1..=n)
+        .map(|i| format!("line {}", i))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// Generate N lines with a specific pattern at certain positions.
@@ -113,11 +116,7 @@ mod basic_truncation {
 
     #[test]
     fn empty_input_produces_empty_output() {
-        trunc()
-            .write_stdin("")
-            .assert()
-            .success()
-            .stdout("");
+        trunc().write_stdin("").assert().success().stdout("");
     }
 
     #[test]
@@ -371,13 +370,22 @@ mod pattern_mode {
 
         // Default context is 3 lines
         // Should show lines 47, 48, 49, 50 (match), 51, 52, 53
-        assert!(stdout.contains("line 47"), "Should contain 3 lines before match");
+        assert!(
+            stdout.contains("line 47"),
+            "Should contain 3 lines before match"
+        );
         assert!(stdout.contains("line 48"), "Should contain context");
         assert!(stdout.contains("line 49"), "Should contain context");
-        assert!(stdout.contains("line 50 contains ERROR"), "Should contain match");
+        assert!(
+            stdout.contains("line 50 contains ERROR"),
+            "Should contain match"
+        );
         assert!(stdout.contains("line 51"), "Should contain context");
         assert!(stdout.contains("line 52"), "Should contain context");
-        assert!(stdout.contains("line 53"), "Should contain 3 lines after match");
+        assert!(
+            stdout.contains("line 53"),
+            "Should contain 3 lines after match"
+        );
     }
 
     #[test]
@@ -427,13 +435,28 @@ mod pattern_mode {
         let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
 
         // With context of 1: lines 49, 50 (match), 51
-        assert!(stdout.contains("line 49"), "Should contain 1 line before match");
-        assert!(stdout.contains("line 50 contains ERROR"), "Should contain match");
-        assert!(stdout.contains("line 51"), "Should contain 1 line after match");
+        assert!(
+            stdout.contains("line 49"),
+            "Should contain 1 line before match"
+        );
+        assert!(
+            stdout.contains("line 50 contains ERROR"),
+            "Should contain match"
+        );
+        assert!(
+            stdout.contains("line 51"),
+            "Should contain 1 line after match"
+        );
 
         // Should NOT contain lines further out
-        assert!(!stdout.contains("line 47"), "Should not contain line 47 with context 1");
-        assert!(!stdout.contains("line 53"), "Should not contain line 53 with context 1");
+        assert!(
+            !stdout.contains("line 47"),
+            "Should not contain line 47 with context 1"
+        );
+        assert!(
+            !stdout.contains("line 53"),
+            "Should not contain line 53 with context 1"
+        );
     }
 
     #[test]
@@ -450,9 +473,18 @@ mod pattern_mode {
         let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
 
         // With context of 0: only the matching line
-        assert!(stdout.contains("line 50 contains ERROR"), "Should contain match");
-        assert!(!stdout.contains("line 49"), "Should not contain context lines");
-        assert!(!stdout.contains("line 51"), "Should not contain context lines");
+        assert!(
+            stdout.contains("line 50 contains ERROR"),
+            "Should contain match"
+        );
+        assert!(
+            !stdout.contains("line 49"),
+            "Should not contain context lines"
+        );
+        assert!(
+            !stdout.contains("line 51"),
+            "Should not contain context lines"
+        );
     }
 
     #[test]
@@ -467,8 +499,14 @@ mod pattern_mode {
 
         // Should still show the matches marker but with no matches
         // (the matches in head/tail are shown as part of those sections)
-        assert!(stdout.contains("line 5 contains ERROR"), "Match in head should appear");
-        assert!(stdout.contains("line 95 contains ERROR"), "Match in tail should appear");
+        assert!(
+            stdout.contains("line 5 contains ERROR"),
+            "Match in head should appear"
+        );
+        assert!(
+            stdout.contains("line 95 contains ERROR"),
+            "Match in tail should appear"
+        );
     }
 
     #[test]
@@ -567,7 +605,10 @@ mod pattern_mode {
         // After "[... matches follow ...]", before the match context, we might have "..."
         // Actually, "[... matches follow ...]" itself serves as the separator from head
         // Let's verify the structure: head, "[... matches follow ...]", match context, tail
-        assert!(stdout.contains("[... matches follow ...]"), "Should have matches marker");
+        assert!(
+            stdout.contains("[... matches follow ...]"),
+            "Should have matches marker"
+        );
 
         // The "[... matches follow ...]" line separates head from matches
         let matches_idx = lines
@@ -575,7 +616,8 @@ mod pattern_mode {
             .position(|l| *l == "[... matches follow ...]")
             .expect("Output should contain '... matches ...'");
         assert_eq!(
-            lines[matches_idx - 1], "line 10",
+            lines[matches_idx - 1],
+            "line 10",
             "Line before matches marker should be end of head"
         );
     }
@@ -609,7 +651,8 @@ mod pattern_mode {
             "Should have exactly one line between match context and tail"
         );
         assert_eq!(
-            lines[line_53_idx + 1], "[... matches end ...]",
+            lines[line_53_idx + 1],
+            "[... matches end ...]",
             "Line between match context and tail should be '[... matches end ...]'"
         );
     }
@@ -669,11 +712,17 @@ mod overlapping_regions {
 
         // Each line should appear exactly once
         for i in 1..=10 {
-            let count = lines.iter().filter(|&&l| l == format!("line {}", i)).count();
+            let count = lines
+                .iter()
+                .filter(|&&l| l == format!("line {}", i))
+                .count();
             assert_eq!(count, 1, "line {} should appear exactly once", i);
         }
         for i in 16..=25 {
-            let count = lines.iter().filter(|&&l| l == format!("line {}", i)).count();
+            let count = lines
+                .iter()
+                .filter(|&&l| l == format!("line {}", i))
+                .count();
             assert_eq!(count, 1, "line {} should appear exactly once", i);
         }
     }
@@ -791,10 +840,7 @@ mod edge_cases {
         // Content with null bytes and other binary-looking data
         let input = "line 1\nline \0 2\nline 3";
 
-        trunc()
-            .write_stdin(input)
-            .assert()
-            .success();
+        trunc().write_stdin(input).assert().success();
     }
 
     #[test]
@@ -814,7 +860,11 @@ mod edge_cases {
 
         // Literal brackets should work
         let mut cmd = trunc();
-        let assert = cmd.arg(r"\[bracket\]").write_stdin(input).assert().success();
+        let assert = cmd
+            .arg(r"\[bracket\]")
+            .write_stdin(input)
+            .assert()
+            .success();
 
         let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
         assert!(stdout.contains("[bracket]"));
@@ -881,11 +931,7 @@ mod line_truncation {
     fn short_lines_pass_through_unchanged() {
         let input = "short line\nanother short line\n";
 
-        trunc()
-            .write_stdin(input)
-            .assert()
-            .success()
-            .stdout(input);
+        trunc().write_stdin(input).assert().success().stdout(input);
     }
 
     #[test]
@@ -914,7 +960,10 @@ mod line_truncation {
         let output_line = stdout.lines().next().unwrap();
 
         assert!(output_line.contains("[...]"), "Should contain [...] marker");
-        assert!(output_line.starts_with("a"), "Should start with first 100 chars");
+        assert!(
+            output_line.starts_with("a"),
+            "Should start with first 100 chars"
+        );
         assert!(output_line.ends_with("b"), "Should end with last 100 chars");
     }
 
@@ -932,10 +981,20 @@ mod line_truncation {
         let output_line = stdout.lines().next().unwrap();
 
         // Should be: first_100 + "[...]" + last_100 = 205 chars
-        assert_eq!(output_line.len(), 205, "Truncated line should be exactly 205 chars");
-        assert!(output_line.starts_with(&first_100), "Should start with first 100 chars");
+        assert_eq!(
+            output_line.len(),
+            205,
+            "Truncated line should be exactly 205 chars"
+        );
+        assert!(
+            output_line.starts_with(&first_100),
+            "Should start with first 100 chars"
+        );
         assert!(output_line.contains("[...]"), "Should contain [...] marker");
-        assert!(output_line.ends_with(&last_100), "Should end with last 100 chars");
+        assert!(
+            output_line.ends_with(&last_100),
+            "Should end with last 100 chars"
+        );
     }
 
     #[test]
@@ -954,7 +1013,11 @@ mod line_truncation {
         let output_line = stdout.lines().next().unwrap();
 
         // Should be: 20 + "[...]" + 20 = 45 chars
-        assert_eq!(output_line.len(), 45, "Truncated line with -w 20 should be 45 chars");
+        assert_eq!(
+            output_line.len(),
+            45,
+            "Truncated line with -w 20 should be 45 chars"
+        );
     }
 
     #[test]
@@ -971,7 +1034,11 @@ mod line_truncation {
         let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
         let output_line = stdout.lines().next().unwrap();
 
-        assert_eq!(output_line.len(), 45, "Truncated line with --width 20 should be 45 chars");
+        assert_eq!(
+            output_line.len(),
+            45,
+            "Truncated line with --width 20 should be 45 chars"
+        );
     }
 
     #[test]
@@ -988,15 +1055,19 @@ mod line_truncation {
         let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
         let output_line = stdout.lines().next().unwrap();
 
-        assert_eq!(output_line.len(), 1000, "With -w 0, lines should not be truncated");
+        assert_eq!(
+            output_line.len(),
+            1000,
+            "With -w 0, lines should not be truncated"
+        );
     }
 
     #[test]
     fn unicode_line_truncation_counts_chars_not_bytes() {
         // Each emoji is 1 char but 4 bytes
-        let first = "🎉".repeat(100);  // 100 chars, 400 bytes
+        let first = "🎉".repeat(100); // 100 chars, 400 bytes
         let middle = "x".repeat(500);
-        let last = "🎊".repeat(100);   // 100 chars, 400 bytes
+        let last = "🎊".repeat(100); // 100 chars, 400 bytes
         let line = format!("{}{}{}", first, middle, last);
 
         let mut cmd = trunc();
@@ -1006,9 +1077,19 @@ mod line_truncation {
         let output_line = stdout.lines().next().unwrap();
 
         // Should be: 100 emoji + "[...]" + 100 emoji = 205 chars
-        assert_eq!(output_line.chars().count(), 205, "Should count chars, not bytes");
-        assert!(output_line.starts_with(&first), "Should preserve first 100 emoji");
-        assert!(output_line.ends_with(&last), "Should preserve last 100 emoji");
+        assert_eq!(
+            output_line.chars().count(),
+            205,
+            "Should count chars, not bytes"
+        );
+        assert!(
+            output_line.starts_with(&first),
+            "Should preserve first 100 emoji"
+        );
+        assert!(
+            output_line.ends_with(&last),
+            "Should preserve last 100 emoji"
+        );
     }
 }
 
@@ -1026,17 +1107,19 @@ mod output_size {
     const DEFAULT_MAX_CHARS: usize = 4325;
 
     // Pattern mode worst case:
-    // - Lines: 65 max (10 + 1 + 35 + 4 ellipsis + 5 separators + 10)
-    //   Actually: 10 first + 1 "[... matches follow ...]" + 35 match lines + 4 "..." + 10 last = 60
+    // - Lines: 61 max (10 first + 1 "[... matches follow ...]" + 35 match lines + 4 "[...]" + 1 "[... matches end ...]" + 10 last)
     // - Chars per line: 205 max
-    // - Total: 60 * 205 + 59 newlines = 12359 chars
-    const PATTERN_MAX_CHARS: usize = 12359;
+    // - Total: 61 * 205 + 60 newlines = 12565 chars
+    const PATTERN_MAX_CHARS: usize = 12565;
 
     #[test]
     fn default_mode_max_chars() {
         // Generate input with very long lines
         let long_line = "x".repeat(10_000);
-        let input = (0..100).map(|_| long_line.as_str()).collect::<Vec<_>>().join("\n");
+        let input = (0..100)
+            .map(|_| long_line.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
 
         let mut cmd = trunc();
         let assert = cmd.write_stdin(input).assert().success();
@@ -1103,7 +1186,7 @@ mod output_size {
     #[test]
     fn pattern_mode_max_lines() {
         // Maximum lines in pattern mode with ellipsis separators:
-        // 10 first + 1 "[... matches follow ...]" + 35 (5 matches * 7 context) + 4 "..." + 10 last = 60
+        // 10 first + 1 "[... matches follow ...]" + 35 (5 matches * 7 context) + 4 "[...]" + 1 "[... matches end ...]" + 10 last = 61
 
         let match_positions: Vec<usize> = vec![30, 40, 50, 60, 70];
         let input = generate_lines_with_matches(100, &match_positions, "ERROR");
@@ -1115,8 +1198,8 @@ mod output_size {
         let line_count = stdout.lines().count();
 
         assert!(
-            line_count <= 60,
-            "Pattern mode output ({} lines) should not exceed 60 lines",
+            line_count <= 61,
+            "Pattern mode output ({} lines) should not exceed 61 lines",
             line_count
         );
     }
