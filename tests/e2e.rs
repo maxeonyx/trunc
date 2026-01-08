@@ -490,6 +490,131 @@ mod pattern_mode {
     }
 
     #[test]
+    fn pattern_mode_shows_ellipsis_between_matches() {
+        // Matches at 30 and 60 - far enough apart that their contexts don't overlap
+        // With context 3: match 30 shows 27-33, match 60 shows 57-63
+        // There's a gap between 33 and 57, so we need "..."
+        let input = generate_lines_with_matches(100, &[30, 60], "ERROR");
+
+        let mut cmd = trunc();
+        let assert = cmd.arg("ERROR").write_stdin(input).assert().success();
+
+        let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+        let lines: Vec<&str> = stdout.lines().collect();
+
+        // Find where the matches are and check for "..." between them
+        let first_match_idx = lines
+            .iter()
+            .position(|l| l.contains("line 30"))
+            .expect("Output should contain 'line 30'");
+        let second_match_idx = lines
+            .iter()
+            .position(|l| l.contains("line 60"))
+            .expect("Output should contain 'line 60'");
+
+        // There should be a "..." line between the two match groups
+        let between = &lines[first_match_idx..second_match_idx];
+        assert!(
+            between.iter().any(|l| *l == "..."),
+            "Should have '...' between non-contiguous matches. Lines between: {:?}",
+            between
+        );
+    }
+
+    #[test]
+    fn pattern_mode_no_ellipsis_between_adjacent_matches() {
+        // Matches at 50 and 52 - close enough that contexts overlap
+        // With context 3: match 50 shows 47-53, match 52 shows 49-55
+        // They overlap, so no "..." needed
+        let input = generate_lines_with_matches(100, &[50, 52], "ERROR");
+
+        let mut cmd = trunc();
+        let assert = cmd.arg("ERROR").write_stdin(input).assert().success();
+
+        let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+        let lines: Vec<&str> = stdout.lines().collect();
+
+        // Find where the matches section is (after "... matches ...")
+        let matches_marker_idx = lines
+            .iter()
+            .position(|l| *l == "... matches ...")
+            .expect("Output should contain '... matches ...'");
+        let tail_start = lines
+            .iter()
+            .position(|l| *l == "line 91")
+            .expect("Output should contain 'line 91' (start of tail)");
+
+        // In the matches section, there should be no "..." because they're adjacent
+        let matches_section = &lines[matches_marker_idx + 1..tail_start];
+        assert!(
+            !matches_section.iter().any(|l| *l == "..."),
+            "Should not have '...' between adjacent matches. Matches section: {:?}",
+            matches_section
+        );
+    }
+
+    #[test]
+    fn pattern_mode_ellipsis_between_head_and_matches() {
+        // Match at 50, head is 1-10, so there's a gap
+        let input = generate_lines_with_matches(100, &[50], "ERROR");
+
+        let mut cmd = trunc();
+        let assert = cmd.arg("ERROR").write_stdin(input).assert().success();
+
+        let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+        let lines: Vec<&str> = stdout.lines().collect();
+
+        // After "... matches ...", before the match context, we might have "..."
+        // Actually, "... matches ..." itself serves as the separator from head
+        // Let's verify the structure: head, "... matches ...", match context, tail
+        assert!(stdout.contains("... matches ..."), "Should have matches marker");
+
+        // The "... matches ..." line separates head from matches
+        let matches_idx = lines
+            .iter()
+            .position(|l| *l == "... matches ...")
+            .expect("Output should contain '... matches ...'");
+        assert_eq!(
+            lines[matches_idx - 1], "line 10",
+            "Line before matches marker should be end of head"
+        );
+    }
+
+    #[test]
+    fn pattern_mode_ellipsis_between_matches_and_tail() {
+        // Match at 50 with context 3 shows lines 47-53
+        // Tail starts at 91, so there's a gap
+        let input = generate_lines_with_matches(100, &[50], "ERROR");
+
+        let mut cmd = trunc();
+        let assert = cmd.arg("ERROR").write_stdin(input).assert().success();
+
+        let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+        let lines: Vec<&str> = stdout.lines().collect();
+
+        // After the match context (line 53), before tail (line 91), should have "..."
+        let line_53_idx = lines
+            .iter()
+            .position(|l| *l == "line 53")
+            .expect("Output should contain 'line 53' (end of match context)");
+        let line_91_idx = lines
+            .iter()
+            .position(|l| *l == "line 91")
+            .expect("Output should contain 'line 91' (start of tail)");
+
+        // There should be exactly one line between them, and it should be "..."
+        assert_eq!(
+            line_91_idx - line_53_idx,
+            2,
+            "Should have exactly one line between match context and tail"
+        );
+        assert_eq!(
+            lines[line_53_idx + 1], "...",
+            "Line between match context and tail should be '...'"
+        );
+    }
+
+    #[test]
     fn pattern_mode_regex_support() {
         let input = "error: something\nERROR: something\nwarning: something\nError: something";
 

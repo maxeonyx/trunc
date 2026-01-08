@@ -37,10 +37,12 @@ Shows:
 1. First 10 lines
 2. `... matches ...`
 3. Up to 5 matches from the middle, each with 3 lines of context on either side
-4. Last 10 lines
+4. `...` between non-contiguous match groups
+5. `...` before the last section (if there's a gap)
+6. Last 10 lines
 
-The worst-case output in pattern mode is 56 lines:
-- 10 (start) + 1 (separator) + 35 (5 matches × 7 lines) + 10 (end) = 56
+The worst-case output in pattern mode is 60 lines:
+- 10 (start) + 1 (matches marker) + 35 (5 matches × 7 lines) + 4 (ellipsis separators) + 10 (end) = 60
 
 ## Design Principles
 
