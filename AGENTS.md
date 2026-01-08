@@ -90,9 +90,19 @@ Options:
   -T, --tail <N>      Alias for --last
   -m, --matches <N>   Max matches to show in pattern mode (default: 5)
   -C, --context <N>   Lines of context around each match (default: 3)
+  -w, --width <N>     Chars to show at start/end of long lines (default: 100, 0 = no limit)
   -h, --help          Print help
   -V, --version       Print version
 ```
+
+### Line Truncation
+
+Lines longer than 2×width (default: 200 chars) are truncated:
+```
+<first 100 chars>[...]<last 100 chars>
+```
+
+Use `-w 0` to disable line truncation.
 
 ### Output Format
 

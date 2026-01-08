@@ -14,6 +14,15 @@ AI agents need to read command output, but long outputs waste context tokens and
 
 ## Core Behavior
 
+### Line Truncation
+
+Long lines are truncated to show the first 100 and last 100 characters:
+```
+very long line here... [...]...end of long line
+```
+
+Lines ≤ 200 characters pass through unchanged.
+
 ### Default Mode (No Pattern)
 
 ```
@@ -41,8 +50,19 @@ Shows:
 5. `...` before the last section (if there's a gap)
 6. Last 10 lines
 
-The worst-case output in pattern mode is 60 lines:
-- 10 (start) + 1 (matches marker) + 35 (5 matches × 7 lines) + 4 (ellipsis separators) + 10 (end) = 60
+## Output Size Guarantees
+
+With defaults, output size is bounded:
+
+| Mode | Max Lines | Max Chars/Line | Max Total |
+|------|-----------|----------------|-----------|
+| Default | 21 | 205 | ~4.3 KB |
+| Pattern | 60 | 205 | ~12.4 KB |
+
+Calculation:
+- Max chars per line: 100 + `[...]` (5) + 100 = 205
+- Default: 21 lines × 205 + 20 newlines = 4,325 chars
+- Pattern: 60 lines × 205 + 59 newlines = 12,359 chars
 
 ## Design Principles
 

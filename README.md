@@ -74,6 +74,30 @@ trunc -C 5 "error"       # 5 lines of context per match (default: 3)
 trunc -C 0 "error"       # no context, just matching lines
 ```
 
+### Line truncation
+
+Long lines (>200 chars) are automatically truncated:
+
+```bash
+some-command | trunc           # first/last 100 chars per line
+some-command | trunc -w 50     # first/last 50 chars per line
+some-command | trunc -w 0      # disable line truncation
+```
+
+Output for long lines:
+```
+<first 100 chars>[...]<last 100 chars>
+```
+
+## Output Size Guarantees
+
+With defaults, output is bounded to predictable sizes:
+
+| Mode | Max Lines | Max Chars |
+|------|-----------|-----------|
+| Default | 21 | ~4.3 KB |
+| Pattern | 60 | ~12.4 KB |
+
 ## Why?
 
 Built for AI agents that need to read command output without wasting context tokens. Predictable output size, zero configuration for the common case.

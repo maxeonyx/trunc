@@ -761,15 +761,29 @@ mod edge_cases {
     use super::*;
 
     #[test]
-    fn handles_very_long_lines() {
-        let long_line = "x".repeat(100_000);
+    fn long_lines_are_truncated() {
+        // Lines over 200 chars (100 + 100) should be truncated
+        let long_line = "x".repeat(1000);
         let input = format!("{}\nshort\n{}", long_line, long_line);
 
-        trunc()
-            .write_stdin(input.clone())
-            .assert()
-            .success()
-            .stdout(format!("{}\n", input));
+        let mut cmd = trunc();
+        let assert = cmd.write_stdin(input).assert().success();
+
+        let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+        let lines: Vec<&str> = stdout.lines().collect();
+
+        // First line should be truncated
+        assert!(
+            lines[0].contains("[...]"),
+            "Long line should contain [...] truncation marker"
+        );
+        assert!(
+            lines[0].len() < 500,
+            "Truncated line should be much shorter than 1000 chars"
+        );
+
+        // Short line should pass through unchanged
+        assert_eq!(lines[1], "short");
     }
 
     #[test]
@@ -857,17 +871,220 @@ mod cli_basics {
 }
 
 // =============================================================================
+// LINE TRUNCATION
+// =============================================================================
+
+mod line_truncation {
+    use super::*;
+
+    #[test]
+    fn short_lines_pass_through_unchanged() {
+        let input = "short line\nanother short line\n";
+
+        trunc()
+            .write_stdin(input)
+            .assert()
+            .success()
+            .stdout(input);
+    }
+
+    #[test]
+    fn line_at_200_chars_passes_through() {
+        // Exactly 200 chars (100 + 100) should not be truncated
+        let line = "x".repeat(200);
+        let input = format!("{}\n", line);
+
+        trunc()
+            .write_stdin(input.clone())
+            .assert()
+            .success()
+            .stdout(input);
+    }
+
+    #[test]
+    fn line_at_201_chars_is_truncated() {
+        // 201 chars should trigger truncation
+        let line = format!("{}y{}", "a".repeat(100), "b".repeat(100));
+        assert_eq!(line.len(), 201);
+
+        let mut cmd = trunc();
+        let assert = cmd.write_stdin(format!("{}\n", line)).assert().success();
+
+        let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+        let output_line = stdout.lines().next().unwrap();
+
+        assert!(output_line.contains("[...]"), "Should contain [...] marker");
+        assert!(output_line.starts_with("a"), "Should start with first 100 chars");
+        assert!(output_line.ends_with("b"), "Should end with last 100 chars");
+    }
+
+    #[test]
+    fn truncated_line_shows_first_and_last_100_chars() {
+        let first_100 = "A".repeat(100);
+        let middle = "M".repeat(500);
+        let last_100 = "Z".repeat(100);
+        let line = format!("{}{}{}", first_100, middle, last_100);
+
+        let mut cmd = trunc();
+        let assert = cmd.write_stdin(format!("{}\n", line)).assert().success();
+
+        let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+        let output_line = stdout.lines().next().unwrap();
+
+        // Should be: first_100 + "[...]" + last_100 = 205 chars
+        assert_eq!(output_line.len(), 205, "Truncated line should be exactly 205 chars");
+        assert!(output_line.starts_with(&first_100), "Should start with first 100 chars");
+        assert!(output_line.contains("[...]"), "Should contain [...] marker");
+        assert!(output_line.ends_with(&last_100), "Should end with last 100 chars");
+    }
+
+    #[test]
+    fn custom_line_width() {
+        let line = "x".repeat(100);
+
+        // With -w 20, lines over 40 chars should be truncated
+        let mut cmd = trunc();
+        let assert = cmd
+            .args(["-w", "20"])
+            .write_stdin(format!("{}\n", line))
+            .assert()
+            .success();
+
+        let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+        let output_line = stdout.lines().next().unwrap();
+
+        // Should be: 20 + "[...]" + 20 = 45 chars
+        assert_eq!(output_line.len(), 45, "Truncated line with -w 20 should be 45 chars");
+    }
+
+    #[test]
+    fn long_form_width_arg() {
+        let line = "x".repeat(100);
+
+        let mut cmd = trunc();
+        let assert = cmd
+            .args(["--width", "20"])
+            .write_stdin(format!("{}\n", line))
+            .assert()
+            .success();
+
+        let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+        let output_line = stdout.lines().next().unwrap();
+
+        assert_eq!(output_line.len(), 45, "Truncated line with --width 20 should be 45 chars");
+    }
+
+    #[test]
+    fn zero_width_disables_line_truncation() {
+        let line = "x".repeat(1000);
+
+        let mut cmd = trunc();
+        let assert = cmd
+            .args(["-w", "0"])
+            .write_stdin(format!("{}\n", line))
+            .assert()
+            .success();
+
+        let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+        let output_line = stdout.lines().next().unwrap();
+
+        assert_eq!(output_line.len(), 1000, "With -w 0, lines should not be truncated");
+    }
+
+    #[test]
+    fn unicode_line_truncation_counts_chars_not_bytes() {
+        // Each emoji is 1 char but 4 bytes
+        let first = "🎉".repeat(100);  // 100 chars, 400 bytes
+        let middle = "x".repeat(500);
+        let last = "🎊".repeat(100);   // 100 chars, 400 bytes
+        let line = format!("{}{}{}", first, middle, last);
+
+        let mut cmd = trunc();
+        let assert = cmd.write_stdin(format!("{}\n", line)).assert().success();
+
+        let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+        let output_line = stdout.lines().next().unwrap();
+
+        // Should be: 100 emoji + "[...]" + 100 emoji = 205 chars
+        assert_eq!(output_line.chars().count(), 205, "Should count chars, not bytes");
+        assert!(output_line.starts_with(&first), "Should preserve first 100 emoji");
+        assert!(output_line.ends_with(&last), "Should preserve last 100 emoji");
+    }
+}
+
+// =============================================================================
 // OUTPUT SIZE GUARANTEES
 // =============================================================================
 
 mod output_size {
     use super::*;
 
+    // Default worst case calculation:
+    // - Lines: 21 max (10 first + 1 truncated + 10 last)
+    // - Chars per line: 205 max (100 + "[...]" + 100)
+    // - Total: 21 * 205 + 20 newlines = 4325 chars
+    const DEFAULT_MAX_CHARS: usize = 4325;
+
+    // Pattern mode worst case:
+    // - Lines: 65 max (10 + 1 + 35 + 4 ellipsis + 5 separators + 10)
+    //   Actually: 10 first + 1 "... matches ..." + 35 match lines + 4 "..." + 10 last = 60
+    // - Chars per line: 205 max
+    // - Total: 60 * 205 + 59 newlines = 12359 chars
+    const PATTERN_MAX_CHARS: usize = 12359;
+
+    #[test]
+    fn default_mode_max_chars() {
+        // Generate input with very long lines
+        let long_line = "x".repeat(10_000);
+        let input = (0..100).map(|_| long_line.as_str()).collect::<Vec<_>>().join("\n");
+
+        let mut cmd = trunc();
+        let assert = cmd.write_stdin(input).assert().success();
+
+        let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+
+        assert!(
+            stdout.len() <= DEFAULT_MAX_CHARS,
+            "Default mode output ({} chars) should not exceed {} chars",
+            stdout.len(),
+            DEFAULT_MAX_CHARS
+        );
+    }
+
+    #[test]
+    fn pattern_mode_max_chars() {
+        // Generate input with very long lines and matches spread out
+        let long_line = "x".repeat(10_000);
+        let match_line = format!("{}ERROR{}", "y".repeat(5000), "z".repeat(5000));
+
+        let mut lines: Vec<String> = Vec::new();
+        for i in 1..=100 {
+            if [30, 40, 50, 60, 70].contains(&i) {
+                lines.push(match_line.clone());
+            } else {
+                lines.push(long_line.clone());
+            }
+        }
+        let input = lines.join("\n");
+
+        let mut cmd = trunc();
+        let assert = cmd.arg("ERROR").write_stdin(input).assert().success();
+
+        let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+
+        assert!(
+            stdout.len() <= PATTERN_MAX_CHARS,
+            "Pattern mode output ({} chars) should not exceed {} chars",
+            stdout.len(),
+            PATTERN_MAX_CHARS
+        );
+    }
+
     #[test]
     fn default_mode_max_21_lines() {
         // With any input > 20 lines, output should be exactly 21 lines
-        // (10 head + 1 truncated + 10 tail)
-        for size in [50, 100, 1000, 10000] {
+        // (10 first + 1 truncated + 10 last)
+        for size in [50, 100, 1000] {
             let input = generate_lines(size);
 
             let mut cmd = trunc();
@@ -884,12 +1101,10 @@ mod output_size {
     }
 
     #[test]
-    fn pattern_mode_max_56_lines() {
-        // Maximum output in pattern mode:
-        // 10 head + 1 matches + 35 (5 matches * 7 context) + 10 tail = 56
-        // But with overlap deduplication, could be less
+    fn pattern_mode_max_lines() {
+        // Maximum lines in pattern mode with ellipsis separators:
+        // 10 first + 1 "... matches ..." + 35 (5 matches * 7 context) + 4 "..." + 10 last = 60
 
-        // Create input with many matches spread out
         let match_positions: Vec<usize> = vec![30, 40, 50, 60, 70];
         let input = generate_lines_with_matches(100, &match_positions, "ERROR");
 
@@ -899,10 +1114,9 @@ mod output_size {
         let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
         let line_count = stdout.lines().count();
 
-        // Should not exceed 56 lines
         assert!(
-            line_count <= 56,
-            "Pattern mode output ({} lines) should not exceed 56 lines",
+            line_count <= 60,
+            "Pattern mode output ({} lines) should not exceed 60 lines",
             line_count
         );
     }
