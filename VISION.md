@@ -31,7 +31,7 @@ $ some-long-command | trunc
 
 Shows:
 1. First 10 lines
-2. `... truncated ...`
+2. `[... truncated ...]`
 3. Last 10 lines
 
 If the input is 20 lines or fewer, output is unchanged (no truncation marker).
@@ -44,10 +44,10 @@ $ some-long-command | trunc "error"
 
 Shows:
 1. First 10 lines
-2. `... matches ...`
+2. `[... matches follow ...]`
 3. Up to 5 matches from the middle, each with 3 lines of context on either side
-4. `...` between non-contiguous match groups
-5. `...` before the last section (if there's a gap)
+4. `[...]` between non-contiguous match groups
+5. `[... matches end ...]` before the last section
 6. Last 10 lines
 
 ## Output Size Guarantees

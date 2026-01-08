@@ -24,7 +24,7 @@ line 1
 line 2
 ...
 line 10
-... truncated ...
+[... truncated ...]
 line 91
 line 92
 ...
@@ -54,13 +54,14 @@ Output:
 line 1
 ...
 line 10
-... matches ...
+[... matches follow ...]
 line 43
 line 44
 line 45: error occurred here
 line 46
 line 47
 line 48
+[... matches end ...]
 line 91
 ...
 line 100

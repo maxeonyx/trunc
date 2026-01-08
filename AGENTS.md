@@ -108,25 +108,25 @@ Use `-w 0` to disable line truncation.
 
 **Default mode (no pattern):**
 ```
-<first H lines>
-... truncated ...
-<last T lines>
+<first F lines>
+[... truncated ...]
+<last L lines>
 ```
 
 **Pattern mode:**
 ```
 <first F lines>
-... matches ...
+[... matches follow ...]
 <match 1 with context>
-...
+[...]
 <match 2 with context>
-...
+[... matches end ...]
 <last L lines>
 ```
 
 Notes:
-- `...` appears between non-contiguous match groups (when contexts don't overlap)
-- `...` appears between the last match and the tail section (if there's a gap)
-- Adjacent matches (overlapping contexts) are merged without `...`
+- `[...]` appears between non-contiguous match groups (when contexts don't overlap)
+- `[... matches end ...]` appears between the last match and the tail section
+- Adjacent matches (overlapping contexts) are merged without `[...]`
 
-If input is short enough (≤ H + T lines in default mode), output is unchanged with no separator.
+If input is short enough (≤ F + L lines in default mode), output is unchanged with no separator.
