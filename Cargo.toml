@@ -1,0 +1,15 @@
+[package]
+name = "trunc"
+version = "0.1.0"
+edition = "2021"
+description = "Smart truncation for pipe output - like head+tail with grep-style pattern matching"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/maxeonyx/trunc"
+keywords = ["cli", "head", "tail", "truncate", "pipe"]
+categories = ["command-line-utilities"]
+
+[dependencies]
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
