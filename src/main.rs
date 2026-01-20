@@ -23,7 +23,7 @@ struct Args {
     #[arg(
         short = 'f',
         long = "first",
-        default_value = "10",
+        default_value = "30",
         visible_alias = "head",
         short_alias = 'H'
     )]
@@ -33,7 +33,7 @@ struct Args {
     #[arg(
         short = 'l',
         long = "last",
-        default_value = "10",
+        default_value = "30",
         visible_alias = "tail",
         short_alias = 'T'
     )]
