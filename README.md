@@ -2,12 +2,6 @@
 
 Smart truncation for pipe output. Like `head` + `tail` with optional grep-style pattern matching.
 
-## Installation
-
-```bash
-cargo install trunc
-```
-
 ## Usage
 
 ### Basic truncation
