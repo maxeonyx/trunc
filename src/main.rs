@@ -55,7 +55,11 @@ struct Args {
     pattern: Option<String>,
 }
 
-/// Truncate a line if it's too long
+/// Truncate a line if it's too long.
+///
+/// Produces: `<first W chars>[... N chars ...]<last W chars>`
+/// where N is the number of characters removed.
+/// Only truncates when the result is strictly shorter than the original.
 fn truncate_line(line: &str, width: usize) -> String {
     if width == 0 {
         return line.to_string();
@@ -68,9 +72,18 @@ fn truncate_line(line: &str, width: usize) -> String {
         return line.to_string();
     }
 
+    let removed = char_count - max_len;
+    let marker = format!("[... {} chars ...]", removed);
+
+    // Only truncate if the result is strictly shorter than the original
+    let result_len = width + marker.len() + width;
+    if result_len >= char_count {
+        return line.to_string();
+    }
+
     let first: String = line.chars().take(width).collect();
     let last: String = line.chars().skip(char_count - width).collect();
-    format!("{}[...]{}", first, last)
+    format!("{}{}{}", first, marker, last)
 }
 
 fn main() {

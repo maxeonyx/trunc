@@ -847,7 +847,7 @@ mod edge_cases {
 
     #[test]
     fn long_lines_are_truncated() {
-        // Lines over 200 chars (100 + 100) should be truncated
+        // Lines over 200 chars (100 + 100) should be truncated (if result is shorter)
         let long_line = "x".repeat(1000);
         let input = format!("{}\nshort\n{}", long_line, long_line);
 
@@ -857,10 +857,11 @@ mod edge_cases {
         let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
         let lines: Vec<&str> = stdout.lines().collect();
 
-        // First line should be truncated
+        // First line should be truncated with char count marker
         assert!(
-            lines[0].contains("[...]"),
-            "Long line should contain [...] truncation marker"
+            lines[0].contains("[... 800 chars ...]"),
+            "Long line should contain char count marker. Got: {}",
+            lines[0]
         );
         assert!(
             lines[0].len() < 500,
@@ -984,8 +985,9 @@ mod line_truncation {
     }
 
     #[test]
-    fn line_at_201_chars_is_truncated() {
-        // 201 chars should trigger truncation
+    fn line_at_201_chars_is_not_truncated() {
+        // 201 chars: truncation would produce 100 + "[... 1 chars ...]" (17) + 100 = 217 > 201
+        // So truncation should NOT happen (result wouldn't be shorter)
         let line = format!("{}y{}", "a".repeat(100), "b".repeat(100));
         assert_eq!(line.len(), 201);
 
@@ -995,12 +997,15 @@ mod line_truncation {
         let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
         let output_line = stdout.lines().next().unwrap();
 
-        assert!(output_line.contains("[...]"), "Should contain [...] marker");
-        assert!(
-            output_line.starts_with("a"),
-            "Should start with first 100 chars"
+        assert_eq!(
+            output_line.len(),
+            201,
+            "201-char line should pass through unchanged"
         );
-        assert!(output_line.ends_with("b"), "Should end with last 100 chars");
+        assert!(
+            !output_line.contains("[..."),
+            "Should not contain truncation marker"
+        );
     }
 
     #[test]
@@ -1016,17 +1021,20 @@ mod line_truncation {
         let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
         let output_line = stdout.lines().next().unwrap();
 
-        // Should be: first_100 + "[...]" + last_100 = 205 chars
+        // Should be: first_100 + "[... 500 chars ...]" (19) + last_100 = 219 chars
         assert_eq!(
             output_line.len(),
-            205,
-            "Truncated line should be exactly 205 chars"
+            219,
+            "Truncated line should be exactly 219 chars"
         );
         assert!(
             output_line.starts_with(&first_100),
             "Should start with first 100 chars"
         );
-        assert!(output_line.contains("[...]"), "Should contain [...] marker");
+        assert!(
+            output_line.contains("[... 500 chars ...]"),
+            "Should contain char count marker"
+        );
         assert!(
             output_line.ends_with(&last_100),
             "Should end with last 100 chars"
@@ -1048,11 +1056,11 @@ mod line_truncation {
         let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
         let output_line = stdout.lines().next().unwrap();
 
-        // Should be: 20 + "[...]" + 20 = 45 chars
+        // Should be: 20 + "[... 60 chars ...]" (18) + 20 = 58 chars
         assert_eq!(
             output_line.len(),
-            45,
-            "Truncated line with -w 20 should be 45 chars"
+            58,
+            "Truncated line with -w 20 should be 58 chars"
         );
     }
 
@@ -1070,10 +1078,11 @@ mod line_truncation {
         let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
         let output_line = stdout.lines().next().unwrap();
 
+        // 20 + "[... 60 chars ...]" (18) + 20 = 58 chars
         assert_eq!(
             output_line.len(),
-            45,
-            "Truncated line with --width 20 should be 45 chars"
+            58,
+            "Truncated line with --width 20 should be 58 chars"
         );
     }
 
@@ -1112,10 +1121,10 @@ mod line_truncation {
         let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
         let output_line = stdout.lines().next().unwrap();
 
-        // Should be: 100 emoji + "[...]" + 100 emoji = 205 chars
+        // Should be: 100 emoji + "[... 500 chars ...]" (19) + 100 emoji = 219 chars
         assert_eq!(
             output_line.chars().count(),
-            205,
+            219,
             "Should count chars, not bytes"
         );
         assert!(
@@ -1138,15 +1147,15 @@ mod output_size {
 
     // Default worst case calculation:
     // - Lines: 61 max (30 first + 1 truncated + 30 last)
-    // - Chars per line: 205 max (100 + "[...]" + 100)
-    // - Total: 61 * 205 + 60 newlines = 12565 chars
-    const DEFAULT_MAX_CHARS: usize = 12565;
+    // - Chars per line: 220 max (100 + "[... 9800 chars ...]" (20) + 100) for 10k-char input
+    // - Total: 61 * 220 + 60 newlines = 13460 chars
+    const DEFAULT_MAX_CHARS: usize = 13460;
 
     // Pattern mode worst case:
     // - Lines: 101 max (30 first + 1 "[... matches follow ...]" + 35 match lines + 4 "[...]" + 1 "[... matches end ...]" + 30 last)
-    // - Chars per line: 205 max
-    // - Total: 101 * 205 + 100 newlines = 20805 chars
-    const PATTERN_MAX_CHARS: usize = 20805;
+    // - Chars per line: 220 max
+    // - Total: 101 * 220 + 100 newlines = 22320 chars
+    const PATTERN_MAX_CHARS: usize = 22320;
 
     #[test]
     fn default_mode_max_chars() {
