@@ -45,11 +45,26 @@ Test files are in `tests/` directory. Each test:
 2. Pipes it to the `trunc` binary
 3. Asserts on stdout content
 
+## Implementation Workflow
+
+When implementing a task from `TODO.md` or a `TASK-*.ignore.md` file:
+
+1. **Read the task file** and `AGENTS.md` first — understand requirements before writing code
+2. **Run existing tests** to establish baseline — note which pass/fail
+3. **One piece at a time** — implement one marker format change, verify tests pass, commit
+4. **Failing tests first** — new test skeletons in `tests/informative_markers.rs` should fail before you write the code that makes them pass. Commit the failing test separately.
+5. **Update existing tests** — tests in `tests/e2e.rs` that assert on old marker formats must be updated to match new formats. Do this alongside each implementation step.
+6. **Commit and push frequently** — after each piece is verified working
+7. **Update `TODO.md`** — check off items as you complete them
+8. **Update docs when behavior changes** — VISION.md, AGENTS.md CLI spec, and README if it exists
+9. **Run `cargo fmt` and `cargo clippy`** before every commit
+
 ## Key Files
 
 - `src/main.rs` - Entry point and CLI parsing
 - `src/lib.rs` - Core logic (if we split it out)
-- `tests/e2e.rs` - End-to-end tests
+- `tests/e2e.rs` - End-to-end tests (existing behavior)
+- `tests/informative_markers.rs` - Tests for informative marker formats (new)
 - `VISION.md` - Project vision and requirements
 - `TODO.md` - Task tracking
 - `.github/workflows/ci.yml` - CI pipeline (check, fast tests, E2E tests, cross-platform)
@@ -97,36 +112,57 @@ Options:
 
 ### Line Truncation
 
-Lines longer than 2×width (default: 200 chars) are truncated:
+Lines are truncated only when doing so makes the output strictly shorter.
+The marker includes the count of characters removed:
 ```
-<first 100 chars>[...]<last 100 chars>
+<first 100 chars>[... 500 chars ...]<last 100 chars>
 ```
 
 Use `-w 0` to disable line truncation.
 
 ### Output Format
 
+All markers include the count of lines truncated. In pattern mode, markers
+also communicate match position and totals.
+
 **Default mode (no pattern):**
 ```
 <first F lines>
-[... truncated ...]
+[... 80 lines truncated ...]
 <last L lines>
 ```
 
-**Pattern mode:**
+**Pattern mode (5 shown out of 213 total):**
 ```
 <first F lines>
-[... matches follow ...]
-<match 1 with context>
-[...]
-<match 2 with context>
-[... matches end ...]
+[... 36 lines truncated, match 1 shown ...]
+<context + match 1>
+[... 23 lines truncated, match 2 shown ...]
+<context + match 2>
+[... 31 lines truncated, match 5/5 shown ...]
+<context + match 5>
+[... 48 lines and 208 matches truncated (213 total) ...]
+<last L lines>
+```
+
+**Pattern mode (all matches shown, e.g. 1 match):**
+```
+<first F lines>
+[... 24 lines truncated, match 1 shown ...]
+<context + match>
+[... 48 lines truncated ...]
+<last L lines>
+```
+
+**Pattern mode (0 matches found):**
+```
+<first F lines>
+[... 980 lines truncated, 0 matches found ...]
 <last L lines>
 ```
 
 Notes:
-- `[...]` appears between non-contiguous match groups (when contexts don't overlap)
-- `[... matches end ...]` appears between the last match and the tail section
-- Adjacent matches (overlapping contexts) are merged without `[...]`
-
-If input is short enough (≤ F + L lines in default mode), output is unchanged with no separator.
+- The "(N total)" annotation only appears on the end marker, when total > shown
+- The "N/N" notation only appears when the match limit (-m) is hit — otherwise just "match N"
+- Adjacent matches (overlapping contexts) are merged without a marker between them
+- If input is short enough (≤ F + L lines), output is unchanged with no separator

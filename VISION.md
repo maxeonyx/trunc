@@ -16,12 +16,14 @@ AI agents need to read command output, but long outputs waste context tokens and
 
 ### Line Truncation
 
-Long lines are truncated to show the first 100 and last 100 characters:
+Long lines are truncated to show the first 100 and last 100 characters,
+with a marker showing how many characters were removed:
 ```
-very long line here... [...]...end of long line
+<first 100 chars>[... 500 chars ...]<last 100 chars>
 ```
 
-Lines ≤ 200 characters pass through unchanged.
+Lines are only truncated when the result would be strictly shorter than the
+original (accounting for the marker length). Use `-w 0` to disable.
 
 ### Default Mode (No Pattern)
 
@@ -31,7 +33,7 @@ $ some-long-command | trunc
 
 Shows:
 1. First 10 lines
-2. `[... truncated ...]`
+2. `[... 80 lines truncated ...]`
 3. Last 10 lines
 
 If the input is 20 lines or fewer, output is unchanged (no truncation marker).
@@ -44,25 +46,25 @@ $ some-long-command | trunc "error"
 
 Shows:
 1. First 10 lines
-2. `[... matches follow ...]`
+2. `[... 36 lines truncated, match 1 shown ...]`
 3. Up to 5 matches from the middle, each with 3 lines of context on either side
-4. `[...]` between non-contiguous match groups
-5. `[... matches end ...]` before the last section
+4. `[... 23 lines truncated, match 2 shown ...]` between non-contiguous match groups
+5. `[... 48 lines and 208 matches truncated (213 total) ...]` before the tail
 6. Last 10 lines
+
+When all matches are shown, the end marker omits the match count.
+When the match limit (-m) is hit, the last shown match says "match N/N".
+When 0 matches found: `[... 980 lines truncated, 0 matches found ...]`
 
 ## Output Size Guarantees
 
-With defaults, output size is bounded:
+With defaults, output size is bounded. The marker format is longer than before
+(e.g. `[... 500 chars ...]` instead of `[...]`), but total output remains small:
 
-| Mode | Max Lines | Max Chars/Line | Max Total |
-|------|-----------|----------------|-----------|
-| Default | 21 | 205 | ~4.3 KB |
-| Pattern | 60 | 205 | ~12.4 KB |
-
-Calculation:
-- Max chars per line: 100 + `[...]` (5) + 100 = 205
-- Default: 21 lines × 205 + 20 newlines = 4,325 chars
-- Pattern: 60 lines × 205 + 59 newlines = 12,359 chars
+| Mode | Max Lines | Notes |
+|------|-----------|-------|
+| Default | 21 | 10 first + 1 marker + 10 last |
+| Pattern | ~61 | 10 first + 5×(1 marker + 7 context) + 1 end marker + 10 last |
 
 ## Design Principles
 
