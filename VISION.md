@@ -32,11 +32,11 @@ $ some-long-command | trunc
 ```
 
 Shows:
-1. First 10 lines
-2. `[... 80 lines truncated ...]`
-3. Last 10 lines
+1. First 30 lines
+2. `[... 40 lines truncated ...]`
+3. Last 30 lines
 
-If the input is 20 lines or fewer, output is unchanged (no truncation marker).
+If the input is 60 lines or fewer, output is unchanged (no truncation marker).
 
 ### Pattern Mode
 
@@ -45,12 +45,12 @@ $ some-long-command | trunc "error"
 ```
 
 Shows:
-1. First 10 lines
+1. First 30 lines
 2. `[... 36 lines truncated, match 1 shown ...]`
 3. Up to 5 matches from the middle, each with 3 lines of context on either side
 4. `[... 23 lines truncated, match 2 shown ...]` between non-contiguous match groups
 5. `[... 48 lines and 208 matches truncated (213 total) ...]` before the tail
-6. Last 10 lines
+6. Last 30 lines
 
 When all matches are shown, the end marker omits the match count.
 When the match limit (-m) is hit, the last shown match says "match N/N".
@@ -63,8 +63,8 @@ With defaults, output size is bounded. The marker format is longer than before
 
 | Mode | Max Lines | Notes |
 |------|-----------|-------|
-| Default | 21 | 10 first + 1 marker + 10 last |
-| Pattern | ~61 | 10 first + 5×(1 marker + 7 context) + 1 end marker + 10 last |
+| Default | 61 | 30 first + 1 marker + 30 last |
+| Pattern | ~101 | 30 first + 5×(1 marker + 7 context) + 1 end marker + 30 last |
 
 ## Design Principles
 

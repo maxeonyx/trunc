@@ -105,6 +105,10 @@ fn main() {
     let mut printed_matches_header = false;
     let mut last_output_line: usize = 0; // Track the last line number we output
 
+    // Track contiguous ranges of lines output during match streaming,
+    // so the tail loop can skip only lines that were actually output.
+    let mut match_output_ranges: Vec<(usize, usize)> = Vec::new();
+
     // Ring buffer for tail
     let mut tail_buffer: VecDeque<(usize, String)> = VecDeque::with_capacity(last_count + 1);
 
@@ -148,6 +152,17 @@ fn main() {
 
         // Pattern mode: look for matches and stream them
         if let Some(ref re) = pattern {
+            // Helper closure: record a line as output in match_output_ranges
+            let record_output = |ranges: &mut Vec<(usize, usize)>, ln: usize| {
+                if let Some(last) = ranges.last_mut() {
+                    if ln == last.1 + 1 {
+                        last.1 = ln; // extend current range
+                        return;
+                    }
+                }
+                ranges.push((ln, ln)); // start new range
+            };
+
             // Are we still outputting "after" context from a previous match?
             if after_context_remaining > 0 {
                 // Check if this line overlaps with tail - if so, skip (will be in tail)
@@ -156,6 +171,7 @@ fn main() {
                 if line_number > last_output_line {
                     let _ = writeln!(stdout, "{}", truncated);
                     let _ = stdout.flush();
+                    record_output(&mut match_output_ranges, line_number);
                     last_output_line = line_number;
                 }
                 after_context_remaining -= 1;
@@ -190,6 +206,7 @@ fn main() {
                 for (ctx_line_num, ctx_content) in &context_buffer {
                     if *ctx_line_num > last_output_line && *ctx_line_num < line_number {
                         let _ = writeln!(stdout, "{}", truncate_line(ctx_content, width));
+                        record_output(&mut match_output_ranges, *ctx_line_num);
                         last_output_line = *ctx_line_num;
                     }
                 }
@@ -198,6 +215,7 @@ fn main() {
                 if line_number > last_output_line {
                     let _ = writeln!(stdout, "{}", truncated);
                     let _ = stdout.flush();
+                    record_output(&mut match_output_ranges, line_number);
                     last_output_line = line_number;
                 }
 
@@ -252,8 +270,16 @@ fn main() {
     }
 
     // Output tail (only lines not already output)
+    // Use match_output_ranges for precise duplicate detection instead of
+    // last_output_line high-water mark (which incorrectly skips tail lines
+    // that precede match context output).
+    let was_output_in_match = |ln: usize| -> bool {
+        match_output_ranges
+            .iter()
+            .any(|(start, end)| ln >= *start && ln <= *end)
+    };
     for (tail_line_num, tail_content) in &tail_buffer {
-        if *tail_line_num > last_output_line && *tail_line_num > first_count {
+        if *tail_line_num > first_count && !was_output_in_match(*tail_line_num) {
             let _ = writeln!(stdout, "{}", truncate_line(tail_content, width));
         }
     }

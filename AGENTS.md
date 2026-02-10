@@ -99,8 +99,8 @@ Arguments:
   [PATTERN]  Regex pattern to search for in the middle section
 
 Options:
-  -f, --first <N>     Number of lines to show from start (default: 10)
-  -l, --last <N>      Number of lines to show from end (default: 10)
+  -f, --first <N>     Number of lines to show from start (default: 30)
+  -l, --last <N>      Number of lines to show from end (default: 30)
   -H, --head <N>      Alias for --first
   -T, --tail <N>      Alias for --last
   -m, --matches <N>   Max matches to show in pattern mode (default: 5)
