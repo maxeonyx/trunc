@@ -114,8 +114,8 @@ fn main() {
     let mut line_number: usize = 0;
     let mut head_output_count: usize = 0;
     let mut in_middle = false;
-    let mut matches_found: usize = 0;
-    let mut printed_matches_header = false;
+    let mut matches_shown: usize = 0;
+    let mut total_matches: usize = 0; // counts ALL matches including past cutoff
     let mut last_output_line: usize = 0; // Track the last line number we output
 
     // Track contiguous ranges of lines output during match streaming,
@@ -178,9 +178,6 @@ fn main() {
 
             // Are we still outputting "after" context from a previous match?
             if after_context_remaining > 0 {
-                // Check if this line overlaps with tail - if so, skip (will be in tail)
-                // We can't know tail boundaries yet, so just output it
-                // But avoid duplicates - only output if we haven't output this line
                 if line_number > last_output_line {
                     let _ = writeln!(stdout, "{}", truncated);
                     let _ = stdout.flush();
@@ -190,50 +187,66 @@ fn main() {
                 after_context_remaining -= 1;
             }
 
-            // Check for match (only if we haven't hit max matches)
-            // Note: we check BEFORE adding to context buffer, so context_buffer
-            // contains only lines *before* the current line
-            if matches_found < max_matches && re.is_match(&content) {
-                matches_found += 1;
+            // Check for match
+            if re.is_match(&content) {
+                total_matches += 1;
 
-                // Track if this is NOT the first match (for gap detection)
-                let had_previous_match = printed_matches_header;
+                // Only show if we haven't hit the display limit
+                if matches_shown < max_matches {
+                    matches_shown += 1;
 
-                // Print matches header if first match
-                if !printed_matches_header {
-                    let _ = writeln!(stdout, "[... matches follow ...]");
-                    let _ = stdout.flush();
-                    printed_matches_header = true;
-                }
+                    // Calculate gap from last output to this match's context start
+                    let context_start = line_number.saturating_sub(context_size);
+                    let gap_start = last_output_line + 1;
+                    let gap_end = context_start.max(gap_start);
+                    let lines_truncated = gap_end.saturating_sub(gap_start);
 
-                // Check if we need [...] separator (gap between last output and this match context)
-                // Only needed if we already printed a previous match - the "[... matches follow ...]"
-                // header already serves as separator from head
-                let context_start = line_number.saturating_sub(context_size);
-                if had_previous_match && context_start > last_output_line + 1 {
-                    let _ = writeln!(stdout, "[...]");
-                    let _ = stdout.flush();
-                }
+                    // Emit marker before this match group
+                    let match_annotation = if matches_shown == max_matches {
+                        // This is the last match we'll show AND we hit the limit
+                        format!("match {}/{}", matches_shown, max_matches)
+                    } else {
+                        format!("match {}", matches_shown)
+                    };
 
-                // Output "before" context (lines we haven't already output)
-                for (ctx_line_num, ctx_content) in &context_buffer {
-                    if *ctx_line_num > last_output_line && *ctx_line_num < line_number {
-                        let _ = writeln!(stdout, "{}", truncate_line(ctx_content, width));
-                        record_output(&mut match_output_ranges, *ctx_line_num);
-                        last_output_line = *ctx_line_num;
+                    if lines_truncated > 0 {
+                        let _ = writeln!(
+                            stdout,
+                            "[... {} lines truncated, {} shown ...]",
+                            lines_truncated, match_annotation
+                        );
+                        let _ = stdout.flush();
+                    } else if matches_shown == 1 && last_output_line >= first_count {
+                        // First match immediately after head — no gap but still need marker
+                        // (context overlaps with head end)
+                        let _ = writeln!(
+                            stdout,
+                            "[... 0 lines truncated, {} shown ...]",
+                            match_annotation
+                        );
+                        let _ = stdout.flush();
                     }
-                }
 
-                // Output the match line itself (if not already output)
-                if line_number > last_output_line {
-                    let _ = writeln!(stdout, "{}", truncated);
-                    let _ = stdout.flush();
-                    record_output(&mut match_output_ranges, line_number);
-                    last_output_line = line_number;
-                }
+                    // Output "before" context (lines we haven't already output)
+                    for (ctx_line_num, ctx_content) in &context_buffer {
+                        if *ctx_line_num > last_output_line && *ctx_line_num < line_number {
+                            let _ = writeln!(stdout, "{}", truncate_line(ctx_content, width));
+                            record_output(&mut match_output_ranges, *ctx_line_num);
+                            last_output_line = *ctx_line_num;
+                        }
+                    }
 
-                // Set up "after" context
-                after_context_remaining = context_size;
+                    // Output the match line itself (if not already output)
+                    if line_number > last_output_line {
+                        let _ = writeln!(stdout, "{}", truncated);
+                        let _ = stdout.flush();
+                        record_output(&mut match_output_ranges, line_number);
+                        last_output_line = line_number;
+                    }
+
+                    // Set up "after" context
+                    after_context_remaining = context_size;
+                }
             }
 
             // Maintain context buffer for "before" context (add AFTER checking for match)
@@ -265,20 +278,38 @@ fn main() {
 
     if pattern.is_some() {
         // Pattern mode
-        if printed_matches_header {
-            // We printed matches - check if we need "[... matches end ...]"
-            // Only if there's a gap between last output and tail
-            if last_output_line + 1 < tail_start {
-                let _ = writeln!(stdout, "[... matches end ...]");
+        if matches_shown > 0 {
+            // We showed matches — emit end marker with line gap and remaining match info
+            let gap_start = last_output_line + 1;
+            let gap_end = tail_start;
+            let lines_truncated = gap_end.saturating_sub(gap_start);
+            let remaining_matches = total_matches - matches_shown;
+
+            if lines_truncated > 0 || remaining_matches > 0 {
+                if remaining_matches > 0 {
+                    let _ = writeln!(
+                        stdout,
+                        "[... {} lines and {} matches truncated ({} total) ...]",
+                        lines_truncated, remaining_matches, total_matches
+                    );
+                } else {
+                    let _ = writeln!(stdout, "[... {} lines truncated ...]", lines_truncated);
+                }
             }
         } else if needs_truncation {
-            // No matches found in middle - use simple truncation marker
-            let _ = writeln!(stdout, "[... truncated ...]");
+            // No matches found in middle
+            let lines_truncated = total_lines - first_count - last_count;
+            let _ = writeln!(
+                stdout,
+                "[... {} lines truncated, 0 matches found ...]",
+                lines_truncated
+            );
         }
     } else {
         // Default mode (no pattern)
         if needs_truncation {
-            let _ = writeln!(stdout, "[... truncated ...]");
+            let lines_truncated = total_lines - first_count - last_count;
+            let _ = writeln!(stdout, "[... {} lines truncated ...]", lines_truncated);
         }
     }
 

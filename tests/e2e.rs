@@ -78,10 +78,10 @@ mod basic_truncation {
         assert!(stdout.starts_with("line 1\n"), "Should start with line 1");
         assert!(stdout.contains("line 30\n"), "Should contain line 30");
 
-        // Should have truncation marker
+        // Should have truncation marker with line count
         assert!(
-            stdout.contains("[... truncated ...]"),
-            "Should contain truncation marker"
+            stdout.contains("[... 1 lines truncated ...]"),
+            "Should contain truncation marker with line count"
         );
 
         // Should have last 30 lines
@@ -107,7 +107,7 @@ mod basic_truncation {
         assert_eq!(lines[29], "line 30");
 
         // Truncation marker
-        assert_eq!(lines[30], "[... truncated ...]");
+        assert_eq!(lines[30], "[... 40 lines truncated ...]");
 
         // Last 30 lines
         assert_eq!(lines[31], "line 71");
@@ -183,7 +183,7 @@ mod custom_line_counts {
         assert_eq!(lines.len(), 36);
         assert_eq!(lines[0], "line 1");
         assert_eq!(lines[4], "line 5");
-        assert_eq!(lines[5], "[... truncated ...]");
+        assert_eq!(lines[5], "[... 65 lines truncated ...]");
         assert_eq!(lines[6], "line 71");
     }
 
@@ -201,7 +201,7 @@ mod custom_line_counts {
         assert_eq!(lines.len(), 36);
         assert_eq!(lines[0], "line 1");
         assert_eq!(lines[29], "line 30");
-        assert_eq!(lines[30], "[... truncated ...]");
+        assert_eq!(lines[30], "[... 65 lines truncated ...]");
         assert_eq!(lines[31], "line 96");
         assert_eq!(lines[35], "line 100");
     }
@@ -224,7 +224,7 @@ mod custom_line_counts {
         assert_eq!(lines.len(), 7);
         assert_eq!(lines[0], "line 1");
         assert_eq!(lines[2], "line 3");
-        assert_eq!(lines[3], "[... truncated ...]");
+        assert_eq!(lines[3], "[... 94 lines truncated ...]");
         assert_eq!(lines[4], "line 98");
         assert_eq!(lines[6], "line 100");
     }
@@ -241,7 +241,7 @@ mod custom_line_counts {
 
         // 0 first + 1 truncated + 30 last = 31 lines
         assert_eq!(lines.len(), 31);
-        assert_eq!(lines[0], "[... truncated ...]");
+        assert_eq!(lines[0], "[... 70 lines truncated ...]");
         assert_eq!(lines[1], "line 71");
         assert_eq!(lines[30], "line 100");
     }
@@ -260,7 +260,7 @@ mod custom_line_counts {
         assert_eq!(lines.len(), 31);
         assert_eq!(lines[0], "line 1");
         assert_eq!(lines[29], "line 30");
-        assert_eq!(lines[30], "[... truncated ...]");
+        assert_eq!(lines[30], "[... 70 lines truncated ...]");
     }
 
     #[test]
@@ -340,12 +340,13 @@ mod pattern_mode {
 
         let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
         assert!(
-            stdout.contains("[... matches follow ...]"),
-            "Should contain matches marker instead of truncated marker"
+            stdout.contains("lines truncated, match 1 shown"),
+            "Should contain match marker with line count. Got:\n{}",
+            stdout
         );
         assert!(
             !stdout.contains("[... truncated ...]"),
-            "Should not contain truncated marker in pattern mode"
+            "Should not contain plain truncated marker in pattern mode"
         );
     }
 
@@ -551,7 +552,7 @@ mod pattern_mode {
     fn pattern_mode_shows_ellipsis_between_matches() {
         // Matches at 50 and 80 - far enough apart that their contexts don't overlap
         // With context 3: match 50 shows 47-53, match 80 shows 77-83
-        // There's a gap between 53 and 77, so we need "..."
+        // There's a gap between 53 and 77, so we need a marker between them
         let input = generate_lines_with_matches(200, &[50, 80], "ERROR");
 
         let mut cmd = trunc();
@@ -562,24 +563,12 @@ mod pattern_mode {
             .success();
 
         let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
-        let lines: Vec<&str> = stdout.lines().collect();
 
-        // Find where the matches are and check for "..." between them
-        let first_match_idx = lines
-            .iter()
-            .position(|l| l.contains("line 50"))
-            .expect("Output should contain 'line 50'");
-        let second_match_idx = lines
-            .iter()
-            .position(|l| l.contains("line 80"))
-            .expect("Output should contain 'line 80'");
-
-        // There should be a "..." line between the two match groups
-        let between = &lines[first_match_idx..second_match_idx];
+        // Should have an informative marker between the two match groups
         assert!(
-            between.iter().any(|l| *l == "[...]"),
-            "Should have '...' between non-contiguous matches. Lines between: {:?}",
-            between
+            stdout.contains("lines truncated, match 2 shown"),
+            "Should have match 2 marker between non-contiguous matches. Got:\n{}",
+            stdout
         );
     }
 
@@ -587,7 +576,7 @@ mod pattern_mode {
     fn pattern_mode_no_ellipsis_between_adjacent_matches() {
         // Matches at 50 and 52 - close enough that contexts overlap
         // With context 3: match 50 shows 47-53, match 52 shows 49-55
-        // They overlap, so no "..." needed
+        // They overlap, so no marker needed between them
         let input = generate_lines_with_matches(200, &[50, 52], "ERROR");
 
         let mut cmd = trunc();
@@ -600,22 +589,22 @@ mod pattern_mode {
         let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
         let lines: Vec<&str> = stdout.lines().collect();
 
-        // Find where the matches section is (after "[... matches follow ...]")
-        let matches_marker_idx = lines
+        // Find the match lines
+        let first_match_idx = lines
             .iter()
-            .position(|l| *l == "[... matches follow ...]")
-            .expect("Output should contain '... matches ...'");
-        let tail_start = lines
+            .position(|l| l.contains("line 50 contains"))
+            .expect("Output should contain match at line 50");
+        let second_match_idx = lines
             .iter()
-            .position(|l| *l == "line 191")
-            .expect("Output should contain 'line 191' (start of tail)");
+            .position(|l| l.contains("line 52 contains"))
+            .expect("Output should contain match at line 52");
 
-        // In the matches section, there should be no "..." because they're adjacent
-        let matches_section = &lines[matches_marker_idx + 1..tail_start];
+        // In the matches section, there should be no marker between them
+        let between = &lines[first_match_idx + 1..second_match_idx];
         assert!(
-            !matches_section.iter().any(|l| *l == "[...]"),
-            "Should not have '...' between adjacent matches. Matches section: {:?}",
-            matches_section
+            !between.iter().any(|l| l.starts_with("[...")),
+            "Should not have marker between adjacent matches. Between: {:?}",
+            between
         );
     }
 
@@ -634,23 +623,21 @@ mod pattern_mode {
         let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
         let lines: Vec<&str> = stdout.lines().collect();
 
-        // After "[... matches follow ...]", before the match context, we might have "..."
-        // Actually, "[... matches follow ...]" itself serves as the separator from head
-        // Let's verify the structure: head, "[... matches follow ...]", match context, tail
-        assert!(
-            stdout.contains("[... matches follow ...]"),
-            "Should have matches marker"
-        );
-
-        // The "[... matches follow ...]" line separates head from matches
-        let matches_idx = lines
+        // Should have an informative match marker between head and match context
+        let match_marker = lines
             .iter()
-            .position(|l| *l == "[... matches follow ...]")
-            .expect("Output should contain '... matches ...'");
+            .find(|l| l.contains("match 1 shown"))
+            .expect("Should have match 1 marker");
+
+        // The marker should appear right after the head (line 10)
+        let line_10_idx = lines
+            .iter()
+            .position(|l| *l == "line 10")
+            .expect("Output should contain 'line 10'");
         assert_eq!(
-            lines[matches_idx - 1],
-            "line 10",
-            "Line before matches marker should be end of head"
+            lines[line_10_idx + 1],
+            *match_marker,
+            "Match marker should come right after end of head"
         );
     }
 
@@ -670,7 +657,7 @@ mod pattern_mode {
         let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
         let lines: Vec<&str> = stdout.lines().collect();
 
-        // After the match context (line 53), before tail (line 191), should have "[... matches end ...]"
+        // After the match context (line 53), before tail (line 191), should have a line-count marker
         let line_53_idx = lines
             .iter()
             .position(|l| *l == "line 53")
@@ -680,16 +667,16 @@ mod pattern_mode {
             .position(|l| *l == "line 191")
             .expect("Output should contain 'line 191' (start of tail)");
 
-        // There should be exactly one line between them, and it should be "[... matches end ...]"
+        // There should be exactly one line between them — an informative marker
         assert_eq!(
             line_191_idx - line_53_idx,
             2,
             "Should have exactly one line between match context and tail"
         );
-        assert_eq!(
-            lines[line_53_idx + 1],
-            "[... matches end ...]",
-            "Line between match context and tail should be '[... matches end ...]'"
+        assert!(
+            lines[line_53_idx + 1].contains("lines truncated"),
+            "Line between match context and tail should show lines truncated. Got: '{}'",
+            lines[line_53_idx + 1]
         );
     }
 
@@ -1383,12 +1370,12 @@ mod streaming {
             received.push(line);
         }
 
-        let has_matches_marker = received.iter().any(|l| l.contains("matches follow"));
+        let has_match_marker = received.iter().any(|l| l.contains("match 1 shown"));
         let has_error_line = received.iter().any(|l| l.contains("ERROR"));
 
         assert!(
-            has_matches_marker,
-            "Matches marker should stream before stdin closes. Got: {:?}",
+            has_match_marker,
+            "Match marker should stream before stdin closes. Got: {:?}",
             received
         );
         assert!(
