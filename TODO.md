@@ -4,16 +4,16 @@
 
 See `TASK-informative-markers.ignore.md` for full requirements and test plan.
 
-- [ ] Fix pre-existing default mismatch (code says 30, docs/tests say 10)
-- [ ] Within-line: `[... N chars ...]` format with char count
-- [ ] Within-line: only truncate when result is strictly shorter
-- [ ] Across-line: `[... N lines truncated ...]` with line count
-- [ ] Pattern mode: match position markers (`match K/M shown`)
-- [ ] Pattern mode: total match count on first marker
-- [ ] Pattern mode: remaining match count on end marker
-- [ ] Pattern mode: `0 matches found` when none found
-- [ ] Update existing tests in e2e.rs for new marker formats
-- [ ] Update output size guarantee calculations
+- [x] Fix pre-existing default mismatch (code says 30, docs/tests say 10) — 30/30 is correct
+- [x] Within-line: `[... N chars ...]` format with char count
+- [x] Within-line: only truncate when result is strictly shorter
+- [x] Across-line: `[... N lines truncated ...]` with line count
+- [x] Pattern mode: match position markers (`match K shown`, `match K/K shown`)
+- [x] Pattern mode: total match count on end marker
+- [x] Pattern mode: remaining match count on end marker
+- [x] Pattern mode: `0 matches found` when none found
+- [x] Update existing tests in e2e.rs for new marker formats
+- [x] Recompute output size guarantee calculations
 
 ## Completed
 

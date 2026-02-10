@@ -1133,16 +1133,18 @@ mod output_size {
     use super::*;
 
     // Default worst case calculation:
-    // - Lines: 61 max (30 first + 1 truncated + 30 last)
+    // - Lines: 61 max (30 first + 1 truncated marker + 30 last)
     // - Chars per line: 220 max (100 + "[... 9800 chars ...]" (20) + 100) for 10k-char input
-    // - Total: 61 * 220 + 60 newlines = 13460 chars
-    const DEFAULT_MAX_CHARS: usize = 13460;
+    // - Marker line: "[... 40 lines truncated ...]" (30 chars) for 100-line input
+    // - Total: 60 * 221 + 1 * 31 = 13291 bytes (each line + newline)
+    const DEFAULT_MAX_CHARS: usize = 13400;
 
     // Pattern mode worst case:
-    // - Lines: 101 max (30 first + 1 "[... matches follow ...]" + 35 match lines + 4 "[...]" + 1 "[... matches end ...]" + 30 last)
-    // - Chars per line: 220 max
-    // - Total: 101 * 220 + 100 newlines = 22320 chars
-    const PATTERN_MAX_CHARS: usize = 22320;
+    // - Lines: ~101 max (30 first + 6 markers + 35 match context lines + 30 last)
+    // - Content lines: 220 chars each
+    // - Marker lines: ~55 chars each (e.g. "[... 99 lines and 99 matches truncated (99 total) ...]")
+    // - Total: 95 * 221 + 6 * 56 = 21331 bytes
+    const PATTERN_MAX_CHARS: usize = 22400;
 
     #[test]
     fn default_mode_max_chars() {
