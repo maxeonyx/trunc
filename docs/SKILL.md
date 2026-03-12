@@ -9,7 +9,10 @@ Pipe long command output through `trunc` to avoid flooding context.
 
 ## Install
 
-Curl + chmod the binary to ~/.local/bin from github maxeonyx/trunc latest release.
+```bash
+curl -Lo ~/.local/bin/trunc https://trunc.maxeonyx.com/releases/trunc-x86_64-linux
+chmod +x ~/.local/bin/trunc
+```
 
 ## Usage
 
