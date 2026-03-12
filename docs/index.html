@@ -223,7 +223,7 @@ Finished release build in 12.4s</div>
 
     <h2>Install</h2>
     <div class="codeblock codeblock-wide" id="install-block"><span class="comment"># Linux x86_64</span>
-<span class="cmd">curl</span> -Lo ~/.local/bin/trunc <span class="str">https://github.com/maxeonyx/trunc/releases/latest/download/trunc-linux-x86_64</span>
+<span class="cmd">curl</span> -Lo ~/.local/bin/trunc <span class="str">https://github.com/maxeonyx/trunc/releases/latest/download/trunc-x86_64-linux</span>
 <span class="cmd">chmod</span> +x ~/.local/bin/trunc<button class="copy-btn" onclick="copyInstall()">Copy</button></div>
 
     <h2>Agent Skill</h2>
@@ -258,7 +258,7 @@ Curl + chmod the binary to ~/.local/bin from github maxeonyx/trunc latest releas
 
   <script>
     function copyInstall() {
-      const text = `curl -Lo ~/.local/bin/trunc https://github.com/maxeonyx/trunc/releases/latest/download/trunc-linux-x86_64
+      const text = `curl -Lo ~/.local/bin/trunc https://github.com/maxeonyx/trunc/releases/latest/download/trunc-x86_64-linux
 chmod +x ~/.local/bin/trunc`;
       navigator.clipboard.writeText(text);
       event.target.textContent = 'Copied!';
