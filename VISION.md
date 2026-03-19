@@ -16,14 +16,13 @@ AI agents need to read command output, but long outputs waste context tokens and
 
 ### Line Truncation
 
-Long lines are truncated to show the first 100 and last 100 characters,
-with a marker showing how many characters were removed:
+Long lines are truncated to show the first 100 and last 100 characters, with a marker showing how many characters were removed:
+
 ```
 <first 100 chars>[... 500 chars ...]<last 100 chars>
 ```
 
-Lines are only truncated when the result would be strictly shorter than the
-original (accounting for the marker length). Use `-w 0` to disable.
+Lines are only truncated when the result would be strictly shorter than the original (accounting for the marker length). Use `-w 0` to disable.
 
 ### Default Mode (No Pattern)
 
@@ -32,6 +31,7 @@ $ some-long-command | trunc
 ```
 
 Shows:
+
 1. First 30 lines
 2. `[... 40 lines truncated ...]`
 3. Last 30 lines
@@ -45,6 +45,7 @@ $ some-long-command | trunc "error"
 ```
 
 Shows:
+
 1. First 30 lines
 2. `[... 36 lines truncated, match 1 shown ...]`
 3. Up to 5 matches from the middle, each with 3 lines of context on either side
@@ -52,17 +53,14 @@ Shows:
 5. `[... 48 lines and 208 matches truncated (213 total) ...]` before the tail
 6. Last 30 lines
 
-When all matches are shown, the end marker omits the match count.
-When the match limit (-m) is hit, the last shown match says "match N/N".
-When 0 matches found: `[... 980 lines truncated, 0 matches found ...]`
+When all matches are shown, the end marker omits the match count. When the match limit (-m) is hit, the last shown match says "match N/N". When 0 matches found: `[... 980 lines truncated, 0 matches found ...]`
 
 ## Output Size Guarantees
 
-With defaults, output size is bounded. The marker format is longer than before
-(e.g. `[... 500 chars ...]` instead of `[...]`), but total output remains small:
+With defaults, output size is bounded. The marker format is longer than before (e.g. `[... 500 chars ...]` instead of `[...]`), but total output remains small:
 
 | Mode | Max Lines | Notes |
-|------|-----------|-------|
+| --- | --- | --- |
 | Default | 61 | 30 first + 1 marker + 30 last |
 | Pattern | ~101 | 30 first + 5×(1 marker + 7 context) + 1 end marker + 30 last |
 

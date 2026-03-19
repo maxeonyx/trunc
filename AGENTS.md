@@ -41,6 +41,7 @@ The implementation should be simple and streaming:
 Tests are black-box E2E tests that spawn the `trunc` binary and check stdout.
 
 Test files are in `tests/` directory. Each test:
+
 1. Creates input data
 2. Pipes it to the `trunc` binary
 3. Asserts on stdout content
@@ -112,8 +113,8 @@ Options:
 
 ### Line Truncation
 
-Lines are truncated only when doing so makes the output strictly shorter.
-The marker includes the count of characters removed:
+Lines are truncated only when doing so makes the output strictly shorter. The marker includes the count of characters removed:
+
 ```
 <first 100 chars>[... 500 chars ...]<last 100 chars>
 ```
@@ -122,10 +123,10 @@ Use `-w 0` to disable line truncation.
 
 ### Output Format
 
-All markers include the count of lines truncated. In pattern mode, markers
-also communicate match position and totals.
+All markers include the count of lines truncated. In pattern mode, markers also communicate match position and totals.
 
 **Default mode (no pattern):**
+
 ```
 <first F lines>
 [... 80 lines truncated ...]
@@ -133,6 +134,7 @@ also communicate match position and totals.
 ```
 
 **Pattern mode (5 shown out of 213 total):**
+
 ```
 <first F lines>
 [... 36 lines truncated, match 1 shown ...]
@@ -146,6 +148,7 @@ also communicate match position and totals.
 ```
 
 **Pattern mode (all matches shown, e.g. 1 match):**
+
 ```
 <first F lines>
 [... 24 lines truncated, match 1 shown ...]
@@ -155,6 +158,7 @@ also communicate match position and totals.
 ```
 
 **Pattern mode (0 matches found):**
+
 ```
 <first F lines>
 [... 980 lines truncated, 0 matches found ...]
@@ -162,6 +166,7 @@ also communicate match position and totals.
 ```
 
 Notes:
+
 - The "(N total)" annotation only appears on the end marker, when total > shown
 - The "N/N" notation only appears when the match limit (-m) is hit — otherwise just "match N"
 - Adjacent matches (overlapping contexts) are merged without a marker between them

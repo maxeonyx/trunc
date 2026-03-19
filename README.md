@@ -13,6 +13,7 @@ some-command | trunc
 ```
 
 Output:
+
 ```
 line 1
 line 2
@@ -44,6 +45,7 @@ some-command | trunc "error"
 ```
 
 Output:
+
 ```
 line 1
 ...
@@ -80,6 +82,7 @@ some-command | trunc -w 0      # disable line truncation
 ```
 
 Output for long lines:
+
 ```
 <first 100 chars>[...]<last 100 chars>
 ```
@@ -88,10 +91,10 @@ Output for long lines:
 
 With defaults, output is bounded to predictable sizes:
 
-| Mode | Max Lines | Max Chars |
-|------|-----------|-----------|
-| Default | 21 | ~4.3 KB |
-| Pattern | 60 | ~12.4 KB |
+| Mode    | Max Lines | Max Chars |
+| ------- | --------- | --------- |
+| Default | 21        | ~4.3 KB   |
+| Pattern | 60        | ~12.4 KB  |
 
 ## Why?
 
