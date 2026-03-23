@@ -1246,13 +1246,41 @@ mod output_size {
 mod streaming {
     use std::io::ErrorKind;
     use std::io::{BufRead, BufReader, Write};
+    #[cfg(unix)]
+    use std::os::unix::process::ExitStatusExt;
     use std::process::{Command, Stdio};
     use std::sync::mpsc;
+    use std::thread::JoinHandle;
     use std::time::Duration;
 
     /// Get path to the trunc binary
     fn trunc_bin() -> std::path::PathBuf {
         assert_cmd::cargo::cargo_bin("trunc")
+    }
+
+    fn spawn_stdout_reader(stdout: std::process::ChildStdout) -> JoinHandle<Vec<String>> {
+        std::thread::spawn(move || {
+            let reader = BufReader::new(stdout);
+            reader.lines().map_while(Result::ok).collect()
+        })
+    }
+
+    #[cfg(unix)]
+    fn send_signal(pid: u32, signal: i32) {
+        let result = unsafe { libc::kill(pid as i32, signal) };
+        assert_eq!(result, 0, "failed to send signal {signal} to pid {pid}");
+    }
+
+    fn write_numbered_lines(
+        stdin: &mut std::process::ChildStdin,
+        range: std::ops::RangeInclusive<usize>,
+        decorate: impl Fn(usize) -> String,
+    ) {
+        for i in range {
+            writeln!(stdin, "{}", decorate(i)).unwrap();
+            stdin.flush().unwrap();
+            std::thread::sleep(Duration::from_millis(2));
+        }
     }
 
     #[test]
@@ -1439,6 +1467,159 @@ mod streaming {
         assert!(
             writes_before_break < 20,
             "trunc should stop reading promptly after stdout closes; accepted {writes_before_break} lines"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn sigint_in_default_mode_flushes_tail_with_interruption_marker() {
+        let mut child = Command::new(trunc_bin())
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .expect("Failed to spawn trunc");
+
+        let mut stdin = child.stdin.take().expect("Failed to open stdin");
+        let stdout = child.stdout.take().expect("Failed to open stdout");
+        let reader = spawn_stdout_reader(stdout);
+
+        write_numbered_lines(&mut stdin, 1..=100, |i| format!("line {}", i));
+        std::thread::sleep(Duration::from_millis(50));
+
+        send_signal(child.id(), libc::SIGINT);
+
+        let status = child.wait().expect("Failed to wait for trunc");
+        drop(stdin);
+        let stdout_lines = reader.join().expect("stdout reader panicked");
+        let stdout = stdout_lines.join("\n");
+
+        assert_eq!(
+            status.signal(),
+            Some(libc::SIGINT),
+            "signal delivery failed; expected SIGINT termination, got {status}"
+        );
+        assert!(
+            stdout.contains("line 1\nline 2\nline 3"),
+            "expected streamed head output before interruption. stdout:\n{stdout}"
+        );
+        assert!(
+            stdout.contains("interrupted"),
+            "expected interruption marker in stdout. status={status:?}\nstdout:\n{stdout}"
+        );
+        assert!(
+            stdout.contains("line 71\nline 72\nline 73"),
+            "expected flushed tail start after interruption. status={status:?}\nstdout:\n{stdout}"
+        );
+        assert!(
+            stdout.contains("line 100"),
+            "expected latest tail line after interruption. status={status:?}\nstdout:\n{stdout}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn sigterm_in_pattern_mode_preserves_matches_and_flushes_tail() {
+        let mut child = Command::new(trunc_bin())
+            .arg("ERROR")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .expect("Failed to spawn trunc");
+
+        let mut stdin = child.stdin.take().expect("Failed to open stdin");
+        let stdout = child.stdout.take().expect("Failed to open stdout");
+        let reader = spawn_stdout_reader(stdout);
+
+        write_numbered_lines(&mut stdin, 1..=80, |i| {
+            if i == 45 {
+                format!("line {} contains ERROR", i)
+            } else {
+                format!("line {}", i)
+            }
+        });
+        std::thread::sleep(Duration::from_millis(50));
+
+        send_signal(child.id(), libc::SIGTERM);
+
+        let status = child.wait().expect("Failed to wait for trunc");
+        drop(stdin);
+        let stdout_lines = reader.join().expect("stdout reader panicked");
+        let stdout = stdout_lines.join("\n");
+
+        assert_eq!(
+            status.signal(),
+            Some(libc::SIGTERM),
+            "signal delivery failed; expected SIGTERM termination, got {status}"
+        );
+        assert!(
+            stdout.contains("match 1 shown"),
+            "expected already-streamed match marker before interruption. stdout:\n{stdout}"
+        );
+        assert!(
+            stdout.contains("line 45 contains ERROR"),
+            "expected already-streamed match line before interruption. stdout:\n{stdout}"
+        );
+        assert!(
+            stdout.contains("interrupted"),
+            "expected interruption marker in stdout. status={status:?}\nstdout:\n{stdout}"
+        );
+        assert!(
+            stdout.contains("line 51\nline 52\nline 53"),
+            "expected flushed tail start after SIGTERM. status={status:?}\nstdout:\n{stdout}"
+        );
+        assert!(
+            stdout.contains("line 80"),
+            "expected latest tail line after SIGTERM. status={status:?}\nstdout:\n{stdout}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn short_input_interrupted_outputs_accumulated_lines_without_marker() {
+        let mut child = Command::new(trunc_bin())
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .expect("Failed to spawn trunc");
+
+        let mut stdin = child.stdin.take().expect("Failed to open stdin");
+        let stdout = child.stdout.take().expect("Failed to open stdout");
+        let reader = spawn_stdout_reader(stdout);
+
+        write_numbered_lines(&mut stdin, 1..=40, |i| format!("line {}", i));
+        std::thread::sleep(Duration::from_millis(50));
+
+        send_signal(child.id(), libc::SIGINT);
+
+        let status = child.wait().expect("Failed to wait for trunc");
+        drop(stdin);
+        let stdout_lines = reader.join().expect("stdout reader panicked");
+        let stdout = stdout_lines.join("\n");
+
+        assert_eq!(
+            status.signal(),
+            Some(libc::SIGINT),
+            "signal delivery failed; expected SIGINT termination, got {status}"
+        );
+        assert!(
+            !stdout.contains("interrupted"),
+            "did not expect interruption marker for short input. stdout:\n{stdout}"
+        );
+        assert!(
+            !stdout.contains("truncated"),
+            "did not expect truncation marker for short input. stdout:\n{stdout}"
+        );
+        assert!(
+            stdout.contains("line 1\nline 2\nline 3"),
+            "expected early lines to be preserved. stdout:\n{stdout}"
+        );
+        assert!(
+            stdout.contains("line 31\nline 32\nline 33"),
+            "expected buffered tail lines to flush on interruption. status={status:?}\nstdout:\n{stdout}"
+        );
+        assert!(
+            stdout.contains("line 40"),
+            "expected latest received line after interruption. status={status:?}\nstdout:\n{stdout}"
         );
     }
 }
