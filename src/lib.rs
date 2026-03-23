@@ -531,7 +531,7 @@ impl InterruptState {
 fn install_interrupt_handler(signal: i32) {
     let mut action: libc::sigaction = unsafe { mem::zeroed() };
     action.sa_flags = 0;
-    action.sa_sigaction = record_interrupt_signal as usize;
+    action.sa_sigaction = record_interrupt_signal as *const () as usize;
 
     unsafe {
         libc::sigemptyset(&mut action.sa_mask);
