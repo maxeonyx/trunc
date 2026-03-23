@@ -1246,8 +1246,6 @@ mod output_size {
 mod streaming {
     use std::io::ErrorKind;
     use std::io::{BufRead, BufReader, Write};
-    #[cfg(unix)]
-    use std::os::unix::process::ExitStatusExt;
     use std::process::{Command, Stdio};
     use std::sync::mpsc;
     use std::thread::JoinHandle;
@@ -1494,9 +1492,9 @@ mod streaming {
         let stdout = stdout_lines.join("\n");
 
         assert_eq!(
-            status.signal(),
-            Some(libc::SIGINT),
-            "signal delivery failed; expected SIGINT termination, got {status}"
+            status.code(),
+            Some(130),
+            "expected SIGINT exit code, got {status}"
         );
         assert!(
             stdout.contains("line 1\nline 2\nline 3"),
@@ -1547,9 +1545,9 @@ mod streaming {
         let stdout = stdout_lines.join("\n");
 
         assert_eq!(
-            status.signal(),
-            Some(libc::SIGTERM),
-            "signal delivery failed; expected SIGTERM termination, got {status}"
+            status.code(),
+            Some(143),
+            "expected SIGTERM exit code, got {status}"
         );
         assert!(
             stdout.contains("match 1 shown"),
@@ -1597,9 +1595,9 @@ mod streaming {
         let stdout = stdout_lines.join("\n");
 
         assert_eq!(
-            status.signal(),
-            Some(libc::SIGINT),
-            "signal delivery failed; expected SIGINT termination, got {status}"
+            status.code(),
+            Some(130),
+            "expected SIGINT exit code, got {status}"
         );
         assert!(
             !stdout.contains("interrupted"),

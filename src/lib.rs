@@ -2,6 +2,11 @@ use regex::Regex;
 use std::collections::VecDeque;
 use std::io::{self, BufRead, Write};
 
+#[cfg(unix)]
+use std::mem;
+#[cfg(unix)]
+use std::sync::atomic::{AtomicUsize, Ordering};
+
 #[derive(Clone, Debug)]
 pub struct Config {
     pub first: usize,
@@ -23,6 +28,37 @@ pub enum RunError {
 pub enum RunOutcome {
     Completed,
     BrokenPipe,
+    Interrupted(InterruptSignal),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FinishReason {
+    Completed,
+    Interrupted(InterruptSignal),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InterruptSignal {
+    SigInt,
+    SigTerm,
+}
+
+impl InterruptSignal {
+    pub fn exit_code(self) -> i32 {
+        match self {
+            Self::SigInt => 130,
+            Self::SigTerm => 143,
+        }
+    }
+
+    #[cfg(unix)]
+    fn from_raw(signal: usize) -> Option<Self> {
+        match signal as i32 {
+            libc::SIGINT => Some(Self::SigInt),
+            libc::SIGTERM => Some(Self::SigTerm),
+            _ => None,
+        }
+    }
 }
 
 pub fn run<R: BufRead, W: Write>(
@@ -34,14 +70,44 @@ pub fn run<R: BufRead, W: Write>(
     let mut output = Output::new(writer);
     let mut line = String::new();
 
+    #[cfg(unix)]
+    let _signal_guard = SignalGuard::install();
+
     loop {
         line.clear();
 
         match reader.read_line(&mut line) {
-            Ok(0) => break,
+            Ok(0) => {
+                if let Some(signal) = current_interrupt_signal() {
+                    return finish_with_reason(
+                        &mut truncator,
+                        &mut output,
+                        FinishReason::Interrupted(signal),
+                    );
+                }
+                break;
+            }
             Ok(_) => {}
-            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
-            Err(error) => return Err(RunError::Read(error)),
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => {
+                if let Some(signal) = current_interrupt_signal() {
+                    return finish_with_reason(
+                        &mut truncator,
+                        &mut output,
+                        FinishReason::Interrupted(signal),
+                    );
+                }
+                continue;
+            }
+            Err(error) => {
+                if let Some(signal) = current_interrupt_signal() {
+                    return finish_with_reason(
+                        &mut truncator,
+                        &mut output,
+                        FinishReason::Interrupted(signal),
+                    );
+                }
+                return Err(RunError::Read(error));
+            }
         }
 
         strip_trailing_newline(&mut line);
@@ -53,10 +119,28 @@ pub fn run<R: BufRead, W: Write>(
             }
             Err(error) => return Err(RunError::Write(error)),
         }
-    }
 
-    match truncator.finish(&mut output) {
-        Ok(()) => Ok(RunOutcome::Completed),
+        if let Some(signal) = current_interrupt_signal() {
+            return finish_with_reason(
+                &mut truncator,
+                &mut output,
+                FinishReason::Interrupted(signal),
+            );
+        }
+    }
+    finish_with_reason(&mut truncator, &mut output, FinishReason::Completed)
+}
+
+fn finish_with_reason<W: Write>(
+    truncator: &mut Truncator,
+    output: &mut Output<W>,
+    reason: FinishReason,
+) -> Result<RunOutcome, RunError> {
+    match truncator.finish(output, reason) {
+        Ok(()) => Ok(match reason {
+            FinishReason::Completed => RunOutcome::Completed,
+            FinishReason::Interrupted(signal) => RunOutcome::Interrupted(signal),
+        }),
         Err(error) if error.kind() == io::ErrorKind::BrokenPipe => Ok(RunOutcome::BrokenPipe),
         Err(error) => Err(RunError::Write(error)),
     }
@@ -70,6 +154,31 @@ fn strip_trailing_newline(line: &mut String) {
             line.pop();
         }
     }
+}
+
+fn interruption_marker(
+    lines_truncated: usize,
+    remaining_matches: usize,
+    total_matches: usize,
+) -> String {
+    if remaining_matches > 0 {
+        format!(
+            "[... {} lines and {} matches truncated ({} total), interrupted ...]",
+            lines_truncated, remaining_matches, total_matches
+        )
+    } else {
+        format!("[... {} lines truncated, interrupted ...]", lines_truncated)
+    }
+}
+
+#[cfg(unix)]
+fn current_interrupt_signal() -> Option<InterruptSignal> {
+    SIGNAL_STATE.load()
+}
+
+#[cfg(not(unix))]
+fn current_interrupt_signal() -> Option<InterruptSignal> {
+    None
 }
 
 struct Output<W> {
@@ -235,7 +344,7 @@ impl Truncator {
         Ok(())
     }
 
-    fn finish<W: Write>(&mut self, output: &mut Output<W>) -> io::Result<()> {
+    fn finish<W: Write>(&mut self, output: &mut Output<W>, reason: FinishReason) -> io::Result<()> {
         let total_lines = self.line_number;
         if total_lines == 0 {
             return output.flush();
@@ -247,6 +356,7 @@ impl Truncator {
             1
         };
         let needs_truncation = total_lines > self.first_count + self.last_count;
+        let interrupted = matches!(reason, FinishReason::Interrupted(_));
 
         if self.pattern.is_some() {
             if self.matches_shown > 0 {
@@ -256,7 +366,13 @@ impl Truncator {
                 let remaining_matches = self.total_matches - self.matches_shown;
 
                 if lines_truncated > 0 || remaining_matches > 0 {
-                    if remaining_matches > 0 {
+                    if interrupted {
+                        output.write_line(&interruption_marker(
+                            lines_truncated,
+                            remaining_matches,
+                            self.total_matches,
+                        ))?;
+                    } else if remaining_matches > 0 {
                         output.write_line(&format!(
                             "[... {} lines and {} matches truncated ({} total) ...]",
                             lines_truncated, remaining_matches, self.total_matches
@@ -270,14 +386,26 @@ impl Truncator {
                 }
             } else if needs_truncation {
                 let lines_truncated = total_lines - self.first_count - self.last_count;
-                output.write_line(&format!(
-                    "[... {} lines truncated, 0 matches found ...]",
-                    lines_truncated
-                ))?;
+                if interrupted {
+                    output.write_line(&interruption_marker(
+                        lines_truncated,
+                        0,
+                        self.total_matches,
+                    ))?;
+                } else {
+                    output.write_line(&format!(
+                        "[... {} lines truncated, 0 matches found ...]",
+                        lines_truncated
+                    ))?;
+                }
             }
         } else if needs_truncation {
             let lines_truncated = total_lines - self.first_count - self.last_count;
-            output.write_line(&format!("[... {} lines truncated ...]", lines_truncated))?;
+            if interrupted {
+                output.write_line(&interruption_marker(lines_truncated, 0, self.total_matches))?;
+            } else {
+                output.write_line(&format!("[... {} lines truncated ...]", lines_truncated))?;
+            }
         }
 
         for (tail_line_number, tail_content) in &self.tail_buffer {
@@ -343,4 +471,82 @@ fn truncate_line(line: &str, width: usize) -> String {
     let first: String = line.chars().take(width).collect();
     let last: String = line.chars().skip(char_count - width).collect();
     format!("{}{}{}", first, marker, last)
+}
+
+#[cfg(unix)]
+static SIGNAL_STATE: SignalState = SignalState::new();
+
+#[cfg(unix)]
+struct SignalState {
+    pending_signal: AtomicUsize,
+}
+
+#[cfg(unix)]
+impl SignalState {
+    const fn new() -> Self {
+        Self {
+            pending_signal: AtomicUsize::new(0),
+        }
+    }
+
+    fn install(&self) -> SignalGuard {
+        self.pending_signal.store(0, Ordering::SeqCst);
+
+        install_signal_handler(libc::SIGINT);
+        install_signal_handler(libc::SIGTERM);
+
+        SignalGuard { active: true }
+    }
+
+    fn load(&self) -> Option<InterruptSignal> {
+        InterruptSignal::from_raw(self.pending_signal.load(Ordering::SeqCst))
+    }
+
+    fn restore(&self) {
+        self.pending_signal.store(0, Ordering::SeqCst);
+    }
+}
+
+#[cfg(unix)]
+fn install_signal_handler(signal: i32) {
+    let mut action: libc::sigaction = unsafe { mem::zeroed() };
+    action.sa_flags = 0;
+    action.sa_sigaction = handle_signal as usize;
+
+    unsafe {
+        libc::sigemptyset(&mut action.sa_mask);
+        libc::sigaction(signal, &action, std::ptr::null_mut());
+    }
+}
+
+#[cfg(unix)]
+extern "C" fn handle_signal(signal: i32) {
+    SIGNAL_STATE
+        .pending_signal
+        .store(signal as usize, Ordering::SeqCst);
+    unsafe {
+        libc::close(libc::STDIN_FILENO);
+    }
+}
+
+#[cfg(unix)]
+struct SignalGuard {
+    active: bool,
+}
+
+#[cfg(unix)]
+impl SignalGuard {
+    fn install() -> Self {
+        SIGNAL_STATE.install()
+    }
+}
+
+#[cfg(unix)]
+impl Drop for SignalGuard {
+    fn drop(&mut self) {
+        if self.active {
+            SIGNAL_STATE.restore();
+            self.active = false;
+        }
+    }
 }

@@ -9,7 +9,7 @@
 use clap::Parser;
 use std::io;
 use std::process;
-use trunc::{run, Config, RunError};
+use trunc::{run, Config, RunError, RunOutcome};
 
 /// Smart truncation for pipe output - like head+tail combined.
 ///
@@ -73,7 +73,10 @@ fn main() {
     let stdout = io::stdout();
 
     match run(stdin.lock(), stdout.lock(), args.into()) {
-        Ok(_) => {}
+        Ok(RunOutcome::Completed | RunOutcome::BrokenPipe) => {}
+        Ok(RunOutcome::Interrupted(signal)) => {
+            process::exit(signal.exit_code());
+        }
         Err(RunError::InvalidPattern(error)) => {
             eprintln!("Invalid regex pattern: {error}");
             process::exit(1);
