@@ -8,7 +8,7 @@ use predicates::prelude::*;
 
 /// Helper to create a Command for the trunc binary.
 fn trunc() -> Command {
-    Command::cargo_bin("trunc").unwrap()
+    assert_cmd::cargo::cargo_bin_cmd!("trunc")
 }
 
 /// Generate N lines of input: "line 1\nline 2\n..."
@@ -1253,7 +1253,7 @@ mod streaming {
 
     /// Get path to the trunc binary
     fn trunc_bin() -> std::path::PathBuf {
-        assert_cmd::cargo::cargo_bin("trunc")
+        assert_cmd::cargo::cargo_bin!("trunc").to_path_buf()
     }
 
     fn spawn_stdout_reader(stdout: std::process::ChildStdout) -> JoinHandle<Vec<String>> {

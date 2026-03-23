@@ -12,7 +12,7 @@ use assert_cmd::Command;
 
 /// Helper to create a Command for the trunc binary.
 fn trunc() -> Command {
-    Command::cargo_bin("trunc").unwrap()
+    assert_cmd::cargo::cargo_bin_cmd!("trunc")
 }
 
 /// Generate N lines of input: "line 1\nline 2\n..."
@@ -444,11 +444,7 @@ mod pattern_informative_markers {
     fn last_match_at_limit_shows_n_of_n() {
         // 11 matches, -m 5 → match 5 says "match 5/5 shown"
         // Matches spaced 10 apart so contexts (±3) don't overlap
-        let match_positions: Vec<usize> = (20..=70).step_by(10).collect(); // 20,30,40,50,60,70 = 6 matches
-                                                                           // Plus extras to make > 5: add more beyond
-        let mut positions: Vec<usize> = (15..=85).step_by(10).collect(); // 15,25,35,45,55,65,75,85 = 8 matches
-                                                                         // Actually, let's just use widely-spaced matches in range 20-80
-        positions = vec![20, 30, 40, 50, 60, 70, 75, 80]; // 8 matches, first 5 shown
+        let positions = vec![20, 30, 40, 50, 60, 70, 75, 80]; // 8 matches, first 5 shown
         let input = generate_lines_with_matches(100, &positions, "ERROR");
 
         let mut cmd = trunc();
