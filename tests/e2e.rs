@@ -1244,6 +1244,7 @@ mod output_size {
 // =============================================================================
 
 mod streaming {
+    use std::io::ErrorKind;
     use std::io::{BufRead, BufReader, Write};
     use std::process::{Command, Stdio};
     use std::sync::mpsc;
@@ -1271,10 +1272,8 @@ mod streaming {
         let (tx, rx) = mpsc::channel();
         std::thread::spawn(move || {
             let reader = BufReader::new(stdout);
-            for line in reader.lines() {
-                if let Ok(l) = line {
-                    let _ = tx.send(l);
-                }
+            for line in reader.lines().map_while(Result::ok) {
+                let _ = tx.send(line);
             }
         });
 
@@ -1329,10 +1328,8 @@ mod streaming {
         let (tx, rx) = mpsc::channel();
         std::thread::spawn(move || {
             let reader = BufReader::new(stdout);
-            for line in reader.lines() {
-                if let Ok(l) = line {
-                    let _ = tx.send(l);
-                }
+            for line in reader.lines().map_while(Result::ok) {
+                let _ = tx.send(line);
             }
         });
 
@@ -1389,5 +1386,59 @@ mod streaming {
         // Close stdin and wait
         drop(stdin);
         let _ = child.wait();
+    }
+
+    #[test]
+    fn broken_pipe_exits_early_instead_of_continuing_to_read() {
+        let mut child = Command::new(trunc_bin())
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .expect("Failed to spawn trunc");
+
+        let mut stdin = child.stdin.take().expect("Failed to open stdin");
+        drop(child.stdout.take());
+
+        let writer = std::thread::spawn(move || {
+            let mut writes_before_break = 0usize;
+
+            for i in 1..=1000 {
+                match writeln!(stdin, "line {}", i) {
+                    Ok(()) => writes_before_break += 1,
+                    Err(error) => {
+                        assert_eq!(
+                            error.kind(),
+                            ErrorKind::BrokenPipe,
+                            "Expected broken pipe when trunc exits early, got: {error}"
+                        );
+                        return writes_before_break;
+                    }
+                }
+
+                stdin.flush().unwrap();
+                std::thread::sleep(Duration::from_millis(5));
+            }
+
+            writes_before_break
+        });
+
+        let status = loop {
+            if let Some(status) = child.try_wait().expect("Failed to poll child status") {
+                break status;
+            }
+
+            std::thread::sleep(Duration::from_millis(10));
+        };
+
+        let writes_before_break = writer.join().expect("writer thread panicked");
+
+        assert!(
+            status.success(),
+            "Broken pipe should be a clean exit: {status}"
+        );
+        assert!(
+            writes_before_break < 20,
+            "trunc should stop reading promptly after stdout closes; accepted {writes_before_break} lines"
+        );
     }
 }
