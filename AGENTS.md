@@ -34,7 +34,7 @@ The implementation should be simple and streaming:
 2. Buffer the first N lines (head)
 3. Maintain a ring buffer of the last M lines (tail)
 4. If pattern mode: also track matches with context
-5. On EOF: output head, separator, matches (if any), tail
+5. On EOF or interruption: finalize from accumulated state and output any remaining marker + tail
 
 ## Test Strategy
 
@@ -165,9 +165,18 @@ All markers include the count of lines truncated. In pattern mode, markers also 
 <last L lines>
 ```
 
+**Interrupted before EOF:**
+
+```
+<already streamed output>
+[... 48 lines truncated, interrupted ...]
+<last L lines received before interruption>
+```
+
 Notes:
 
 - The "(N total)" annotation only appears on the end marker, when total > shown
 - The "N/N" notation only appears when the match limit (-m) is hit — otherwise just "match N"
 - Adjacent matches (overlapping contexts) are merged without a marker between them
 - If input is short enough (≤ F + L lines), output is unchanged with no separator
+- On `SIGINT`/`SIGTERM`, `trunc` flushes the tail buffer before exiting and uses exit codes 130/143

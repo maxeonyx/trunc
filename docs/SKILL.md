@@ -17,7 +17,9 @@ chmod +x ~/.local/bin/trunc
 ## Usage
 
 ```bash
-some-command | trunc              # First 10 + last 10 lines
+some-command | trunc              # First 30 + last 30 lines
 some-command | trunc -f 5 -l 5   # Custom counts
 some-command | trunc "error"     # Pattern mode
 ```
+
+If the pipeline is interrupted with `SIGINT` or `SIGTERM`, `trunc` flushes its buffered tail before exiting so the most recent lines are still visible.

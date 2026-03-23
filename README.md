@@ -6,7 +6,7 @@ Smart truncation for pipe output. Like `head` + `tail` with optional grep-style 
 
 ### Basic truncation
 
-Show first 10 and last 10 lines:
+Show first 30 and last 30 lines:
 
 ```bash
 some-command | trunc
@@ -16,12 +16,10 @@ Output:
 
 ```
 line 1
-line 2
 ...
-line 10
-[... truncated ...]
-line 91
-line 92
+line 30
+[... 40 lines truncated ...]
+line 71
 ...
 line 100
 ```
@@ -30,8 +28,8 @@ line 100
 
 ```bash
 some-command | trunc -f 5 -l 5    # 5 lines at start and end
-some-command | trunc -f 20        # 20 at start, default 10 at end
-some-command | trunc -l 3         # default 10 at start, 3 at end
+some-command | trunc -f 20        # 20 at start, default 30 at end
+some-command | trunc -l 3         # default 30 at start, 3 at end
 some-command | trunc --first 5 --last 5  # long form
 some-command | trunc --head 5 --tail 5   # aliases for head/tail fans
 ```
@@ -49,16 +47,16 @@ Output:
 ```
 line 1
 ...
-line 10
-[... matches follow ...]
+line 30
+[... 12 lines truncated, match 1 shown ...]
 line 43
 line 44
 line 45: error occurred here
 line 46
 line 47
 line 48
-[... matches end ...]
-line 91
+[... 42 lines truncated ...]
+line 71
 ...
 line 100
 ```
@@ -84,17 +82,31 @@ some-command | trunc -w 0      # disable line truncation
 Output for long lines:
 
 ```
-<first 100 chars>[...]<last 100 chars>
+<first 100 chars>[... 500 chars ...]<last 100 chars>
 ```
+
+### Interrupted pipelines
+
+If `trunc` receives `SIGINT` or `SIGTERM`, it flushes the tail buffer before exiting so you still see the most recent lines received:
+
+```text
+<already streamed output>
+[... 48 lines truncated, interrupted ...]
+<last lines received before interruption>
+```
+
+If the input is interrupted before it grows beyond `first + last`, `trunc` just outputs what it has received so far with no marker.
 
 ## Output Size Guarantees
 
 With defaults, output is bounded to predictable sizes:
 
-| Mode    | Max Lines | Max Chars |
-| ------- | --------- | --------- |
-| Default | 21        | ~4.3 KB   |
-| Pattern | 60        | ~12.4 KB  |
+| Mode    | Max Lines | Notes |
+| ------- | --------- | ----- |
+| Default | 61        | 30 first + 1 marker + 30 last |
+| Pattern | ~101      | 30 first + 5×(1 marker + 7 context) + 1 end marker + 30 last |
+
+These bounds apply to the portion of the stream actually received. If the producer is interrupted, `trunc` finalizes from the data seen so far.
 
 ## Why?
 

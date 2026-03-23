@@ -1,8 +1,10 @@
 # trunc - TODO
 
-## Current: Informative Truncation Markers
+## Current
 
-See `TASK-informative-markers.ignore.md` for full requirements and test plan.
+- No active tracked work
+
+## Completed
 
 - [x] Fix pre-existing default mismatch (code says 30, docs/tests say 10) — 30/30 is correct
 - [x] Within-line: `[... N chars ...]` format with char count
@@ -14,10 +16,8 @@ See `TASK-informative-markers.ignore.md` for full requirements and test plan.
 - [x] Pattern mode: `0 matches found` when none found
 - [x] Update existing tests in e2e.rs for new marker formats
 - [x] Recompute output size guarantee calculations
-
-## Completed
-
 - [x] Streaming output (first lines + matches stream immediately)
+- [x] Flush tail buffer with interruption-aware marker on `SIGINT`/`SIGTERM`
 - [x] Create repository
 - [x] Write VISION.md
 - [x] Write comprehensive E2E tests
