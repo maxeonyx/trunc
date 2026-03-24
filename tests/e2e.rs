@@ -860,8 +860,8 @@ mod edge_cases {
     }
 
     #[test]
-    fn handles_binary_looking_content() {
-        // Content with null bytes and other binary-looking data
+    fn handles_embedded_nul_bytes_in_utf8_input() {
+        // Embedded NUL bytes are still valid UTF-8 and should pass through stdin.
         let input = "line 1\nline \0 2\nline 3";
 
         trunc().write_stdin(input).assert().success();

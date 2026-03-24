@@ -76,21 +76,23 @@ pub fn run<R: BufRead, W: Write>(
     loop {
         line.clear();
 
-        match reader.read_line(&mut line) {
-            Ok(0) => break,
-            Ok(_) => {}
-            Err(error) if error.kind() == io::ErrorKind::Interrupted => {
-                if let Some(result) = finish_if_interrupted(&mut truncator, &mut output) {
-                    return result;
-                }
-                continue;
-            }
+        let bytes_read = match reader.read_line(&mut line) {
+            Ok(bytes_read) => bytes_read,
             Err(error) => {
                 if let Some(result) = finish_if_interrupted(&mut truncator, &mut output) {
                     return result;
                 }
+
+                if error.kind() == io::ErrorKind::Interrupted {
+                    continue;
+                }
+
                 return Err(RunError::Read(error));
             }
+        };
+
+        if bytes_read == 0 {
+            break;
         }
 
         strip_trailing_newline(&mut line);
