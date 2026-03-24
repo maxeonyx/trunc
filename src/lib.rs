@@ -68,35 +68,18 @@ pub fn run<R: BufRead, W: Write>(
 ) -> Result<RunOutcome, RunError> {
     let mut truncator = Truncator::new(config).map_err(RunError::InvalidPattern)?;
     let mut output = Output::new(writer);
-    let mut line = Vec::new();
+    let mut line_buffer = Vec::new();
 
     #[cfg(unix)]
     let _pending_interrupt_guard = PendingInterruptGuard::install();
 
     loop {
-        line.clear();
-
-        let bytes_read = match reader.read_until(b'\n', &mut line) {
-            Ok(bytes_read) => bytes_read,
-            Err(error) => {
-                if let Some(result) = finish_if_interrupted(&mut truncator, &mut output) {
-                    return result;
-                }
-
-                if error.kind() == io::ErrorKind::Interrupted {
-                    continue;
-                }
-
-                return Err(RunError::Read(error));
-            }
-        };
-
-        if bytes_read == 0 {
-            break;
-        }
-
-        strip_trailing_newline_bytes(&mut line);
-        let line = String::from_utf8_lossy(&line);
+        let line =
+            match read_lossy_line(&mut reader, &mut line_buffer, &mut truncator, &mut output)? {
+                ReadLine::Line(line) => line,
+                ReadLine::Eof => break,
+                ReadLine::Retry => continue,
+            };
 
         match truncator.process_line(&line, &mut output) {
             Ok(()) => {}
@@ -116,6 +99,45 @@ pub fn run<R: BufRead, W: Write>(
     }
 
     finish_with_reason(&mut truncator, &mut output, FinishReason::Completed)
+}
+
+enum ReadLine {
+    Line(String),
+    Eof,
+    Retry,
+}
+
+fn read_lossy_line<R: BufRead, W: Write>(
+    reader: &mut R,
+    line_buffer: &mut Vec<u8>,
+    truncator: &mut Truncator,
+    output: &mut Output<W>,
+) -> Result<ReadLine, RunError> {
+    line_buffer.clear();
+
+    let bytes_read = match reader.read_until(b'\n', line_buffer) {
+        Ok(bytes_read) => bytes_read,
+        Err(error) => {
+            if let Some(result) = finish_if_interrupted(truncator, output) {
+                return result.map(|_| ReadLine::Eof);
+            }
+
+            if error.kind() == io::ErrorKind::Interrupted {
+                return Ok(ReadLine::Retry);
+            }
+
+            return Err(RunError::Read(error));
+        }
+    };
+
+    if bytes_read == 0 {
+        return Ok(ReadLine::Eof);
+    }
+
+    strip_trailing_newline_bytes(line_buffer);
+    Ok(ReadLine::Line(
+        String::from_utf8_lossy(line_buffer).into_owned(),
+    ))
 }
 
 fn finish_if_interrupted<W: Write>(

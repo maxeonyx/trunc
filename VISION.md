@@ -4,6 +4,8 @@
 
 `trunc` is a pipe destination that intelligently shortens command output. It combines head, tail, and grep into a single tool optimized for when you need to see "just enough" of a command's output without being overwhelmed.
 
+It treats stdin as arbitrary command output: lines are split on newlines, and invalid UTF-8 is decoded lossily so unexpected bytes do not fail the pipeline.
+
 ## Primary Use Case
 
 AI agents need to read command output, but long outputs waste context tokens and obscure important information. `trunc` gives them exactly what they need:

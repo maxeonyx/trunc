@@ -30,7 +30,7 @@ cargo clippy
 
 The implementation should be simple and streaming:
 
-1. Read stdin line by line
+1. Read stdin line by line, decoding each line lossily from bytes so arbitrary command output does not fail on invalid UTF-8
 2. Buffer the first N lines (head)
 3. Maintain a ring buffer of the last M lines (tail)
 4. If pattern mode: also track matches with context

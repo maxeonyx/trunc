@@ -834,7 +834,7 @@ mod edge_cases {
     use std::io::Write;
     use std::process::{Command, Stdio};
 
-    fn run_trunc_with_bytes(args: &[&str], input: &[u8]) -> std::process::Output {
+    fn run_trunc_with_raw_stdin(args: &[&str], input: &[u8]) -> std::process::Output {
         let mut child = Command::new(assert_cmd::cargo::cargo_bin!("trunc"))
             .args(args)
             .stdin(Stdio::piped())
@@ -881,7 +881,7 @@ mod edge_cases {
     }
 
     #[test]
-    fn handles_embedded_nul_bytes_in_utf8_input() {
+    fn accepts_embedded_nul_in_utf8_input() {
         // Embedded NUL bytes are still valid UTF-8 and should pass through stdin.
         let input = "line 1\nline \0 2\nline 3";
 
@@ -889,8 +889,8 @@ mod edge_cases {
     }
 
     #[test]
-    fn lossy_decodes_non_utf8_input_in_default_mode() {
-        let output = run_trunc_with_bytes(&[], b"line 1\nline \xff 2\nline 3\n");
+    fn accepts_non_utf8_input_with_lossy_decoding() {
+        let output = run_trunc_with_raw_stdin(&[], b"line 1\nline \xff 2\nline 3\n");
 
         assert!(
             output.status.success(),
@@ -906,10 +906,10 @@ mod edge_cases {
     }
 
     #[test]
-    fn lossy_decoded_lines_still_match_patterns() {
-        let output = run_trunc_with_bytes(
-            &["-f", "1", "-l", "1", "ERROR"],
-            b"head\nmiddle\ninvalid \xff ERROR\ntail\n",
+    fn matches_patterns_in_lossy_decoded_input() {
+        let output = run_trunc_with_raw_stdin(
+            &["-f", "1", "-l", "1", "-C", "0", "ERROR"],
+            b"head\nskipped\ninvalid \xff ERROR\ntail\n",
         );
 
         assert!(
@@ -919,11 +919,10 @@ mod edge_cases {
             String::from_utf8_lossy(&output.stderr)
         );
 
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        assert!(stdout.contains("[... 0 lines truncated, match 1 shown ...]"));
-        assert!(stdout.contains("middle\n"));
-        assert!(stdout.contains("invalid \u{fffd} ERROR"));
-        assert!(stdout.contains("tail\n"));
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout),
+            "head\n[... 1 lines truncated, match 1 shown ...]\ninvalid \u{fffd} ERROR\ntail\n"
+        );
         assert!(output.stderr.is_empty(), "stderr should be empty");
     }
 

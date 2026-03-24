@@ -2,6 +2,8 @@
 
 Smart truncation for pipe output. Like `head` + `tail` with optional grep-style pattern matching.
 
+`trunc` accepts arbitrary piped bytes. It splits stdin on newlines and lossily decodes invalid UTF-8 so unexpected output does not fail the pipeline.
+
 ## Usage
 
 ### Basic truncation
