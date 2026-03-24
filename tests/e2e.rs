@@ -831,6 +831,27 @@ mod overlapping_regions {
 
 mod edge_cases {
     use super::*;
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+
+    fn run_trunc_with_bytes(args: &[&str], input: &[u8]) -> std::process::Output {
+        let mut child = Command::new(assert_cmd::cargo::cargo_bin!("trunc"))
+            .args(args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("failed to spawn trunc");
+
+        child
+            .stdin
+            .take()
+            .expect("failed to open stdin")
+            .write_all(input)
+            .expect("failed to write stdin bytes");
+
+        child.wait_with_output().expect("failed to wait for trunc")
+    }
 
     #[test]
     fn long_lines_are_truncated() {
@@ -865,6 +886,44 @@ mod edge_cases {
         let input = "line 1\nline \0 2\nline 3";
 
         trunc().write_stdin(input).assert().success();
+    }
+
+    #[test]
+    fn lossy_decodes_non_utf8_input_in_default_mode() {
+        let output = run_trunc_with_bytes(&[], b"line 1\nline \xff 2\nline 3\n");
+
+        assert!(
+            output.status.success(),
+            "expected success, got status {:?}, stderr: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout),
+            "line 1\nline \u{fffd} 2\nline 3\n"
+        );
+        assert!(output.stderr.is_empty(), "stderr should be empty");
+    }
+
+    #[test]
+    fn lossy_decoded_lines_still_match_patterns() {
+        let output = run_trunc_with_bytes(
+            &["-f", "1", "-l", "1", "ERROR"],
+            b"head\nmiddle\ninvalid \xff ERROR\ntail\n",
+        );
+
+        assert!(
+            output.status.success(),
+            "expected success, got status {:?}, stderr: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("[... 1 lines truncated, match 1 shown ...]"));
+        assert!(stdout.contains("invalid \u{fffd} ERROR"));
+        assert!(stdout.contains("tail\n"));
+        assert!(output.stderr.is_empty(), "stderr should be empty");
     }
 
     #[test]
