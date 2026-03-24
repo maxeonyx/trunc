@@ -920,7 +920,8 @@ mod edge_cases {
         );
 
         let stdout = String::from_utf8_lossy(&output.stdout);
-        assert!(stdout.contains("[... 1 lines truncated, match 1 shown ...]"));
+        assert!(stdout.contains("[... 0 lines truncated, match 1 shown ...]"));
+        assert!(stdout.contains("middle\n"));
         assert!(stdout.contains("invalid \u{fffd} ERROR"));
         assert!(stdout.contains("tail\n"));
         assert!(output.stderr.is_empty(), "stderr should be empty");

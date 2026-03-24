@@ -68,7 +68,7 @@ pub fn run<R: BufRead, W: Write>(
 ) -> Result<RunOutcome, RunError> {
     let mut truncator = Truncator::new(config).map_err(RunError::InvalidPattern)?;
     let mut output = Output::new(writer);
-    let mut line = String::new();
+    let mut line = Vec::new();
 
     #[cfg(unix)]
     let _pending_interrupt_guard = PendingInterruptGuard::install();
@@ -76,7 +76,7 @@ pub fn run<R: BufRead, W: Write>(
     loop {
         line.clear();
 
-        let bytes_read = match reader.read_line(&mut line) {
+        let bytes_read = match reader.read_until(b'\n', &mut line) {
             Ok(bytes_read) => bytes_read,
             Err(error) => {
                 if let Some(result) = finish_if_interrupted(&mut truncator, &mut output) {
@@ -95,7 +95,8 @@ pub fn run<R: BufRead, W: Write>(
             break;
         }
 
-        strip_trailing_newline(&mut line);
+        strip_trailing_newline_bytes(&mut line);
+        let line = String::from_utf8_lossy(&line);
 
         match truncator.process_line(&line, &mut output) {
             Ok(()) => {}
@@ -140,11 +141,11 @@ fn finish_with_reason<W: Write>(
     }
 }
 
-fn strip_trailing_newline(line: &mut String) {
-    if line.ends_with('\n') {
+fn strip_trailing_newline_bytes(line: &mut Vec<u8>) {
+    if line.last() == Some(&b'\n') {
         line.pop();
 
-        if line.ends_with('\r') {
+        if line.last() == Some(&b'\r') {
             line.pop();
         }
     }
