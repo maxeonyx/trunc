@@ -6,6 +6,7 @@
 
 ## Completed
 
+- [x] Handle non-UTF-8 stdin gracefully — lossy decode instead of crashing with "stream did not contain valid UTF-8"
 - [x] Fix pre-existing default mismatch (code says 30, docs/tests say 10) — 30/30 is correct
 - [x] Within-line: `[... N chars ...]` format with char count
 - [x] Within-line: only truncate when result is strictly shorter
