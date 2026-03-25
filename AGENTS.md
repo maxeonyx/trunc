@@ -68,28 +68,28 @@ When implementing a task from `TODO.md` or a `TASK-*.ignore.md` file:
 - `tests/informative_markers.rs` - Tests for informative marker formats (new)
 - `VISION.md` - Project vision and requirements
 - `TODO.md` - Task tracking
-- `.github/workflows/ci.yml` - CI pipeline (check, fast tests, E2E tests, cross-platform)
-- `.github/workflows/release.yml` - Release pipeline (build binaries, GitHub release, crates.io)
+- `.github/workflows/ci.yml` - CI/CD pipeline (check, build, release, pages — all in one file)
 
 ## CI Pipeline
 
-The CI runs on every push and PR to `main`:
+The CI runs on every push to `main` (and manual dispatch). There is no PR trigger. Everything is in `.github/workflows/ci.yml`.
 
-1. **Check & Lint** - `cargo fmt --check`, `cargo clippy`, `cargo check`
-2. **Fast Tests** - Unit tests only (`cargo test --lib`)
-3. **E2E Tests** - Integration tests (`cargo test --test '*'`), depends on Check passing
-4. **Cross-Platform** - Full test suite on Linux, macOS, Windows
+1. **Check** - Version-bump enforcement, `cargo fmt --check`, `cargo clippy`, `cargo test` (all tests)
+2. **Build** (depends on Check) - Cross-platform release binaries for 6 targets (Linux x86_64/x86_64-musl/aarch64, macOS x86_64/aarch64, Windows x86_64)
+3. **Release** (depends on Build) - Creates GitHub Release with all binaries (see below)
+4. **Pages** (depends on Build) - Deploys docs and release binaries to GitHub Pages
 
 ## Release Pipeline
 
-Triggered by pushing a tag like `v0.1.0`:
+Releases happen automatically on every push to `main` — no manual tagging needed.
 
-1. Builds release binaries for:
-   - Linux (x86_64, x86_64-musl, aarch64)
-   - macOS (x86_64, aarch64)
-   - Windows (x86_64)
-2. Creates GitHub Release with all binaries
-3. Publishes to crates.io (requires `CARGO_REGISTRY_TOKEN` secret)
+**Version-bump enforcement:** The Check job reads `package.version` from `Cargo.toml` and checks if a `v{version}` tag already exists on a *different* commit. If so, CI fails — you must bump the version in `Cargo.toml` before pushing new commits. This ensures each version maps to exactly one commit.
+
+**Release creation:** The Release job uses an idempotent recreate strategy — it deletes any existing release/tag for the current version, then creates a fresh GitHub Release at HEAD with all built binaries. The `gh release create` command creates the git tag.
+
+**Workflow:** Make changes → bump version in `Cargo.toml` → push → CI creates the release automatically.
+
+There is no crates.io publishing step.
 
 ## CLI Specification
 
