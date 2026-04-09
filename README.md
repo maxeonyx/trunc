@@ -4,6 +4,35 @@ Smart truncation for pipe output. Like `head` + `tail` with optional grep-style 
 
 `trunc` accepts arbitrary piped bytes. It splits stdin on newlines and lossily decodes invalid UTF-8 so unexpected output does not fail the pipeline.
 
+## Install
+
+### Pre-built binaries
+
+Download the latest release from GitHub Releases: https://github.com/maxeonyx/trunc/releases/latest
+
+Available binaries:
+
+- Linux x86_64: `trunc-x86_64-linux`
+- Linux x86_64-musl: `trunc-x86_64-linux-musl`
+- Linux aarch64: `trunc-aarch64-linux`
+- macOS x86_64: `trunc-x86_64-macos`
+- macOS aarch64: `trunc-aarch64-macos`
+- Windows x86_64: `trunc-x86_64-windows.exe`
+
+On Unix, make the downloaded binary executable and put it on your `PATH`.
+
+### cargo install
+
+This project is not currently published to crates.io, so `cargo install trunc` is not available for this repo.
+
+### Build from source
+
+```bash
+git clone git@github.com:maxeonyx/trunc.git
+cd trunc
+cargo build --release
+```
+
 ## Usage
 
 ### Basic truncation
@@ -116,4 +145,4 @@ Built for AI agents that need to read command output without wasting context tok
 
 ## License
 
-MIT OR Apache-2.0
+MIT
