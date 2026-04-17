@@ -365,37 +365,38 @@ mod line_truncation_line_count {
 //
 // When an agent searches for a pattern, it needs to understand the full picture:
 // how many matches exist in the input, which ones it's seeing, and how many it
-// missed. This is critical for deciding whether to adjust -m (show more matches)
-// or narrow the pattern.
+// missed. This is critical for deciding whether to show more leading/recent
+// matches or narrow the pattern.
 //
-// The total match count only appears on the first marker to avoid repetition.
-// After the last shown match, the remaining count tells the agent what it missed.
+// Pattern mode now follows the same head/tail philosophy as lines:
+// - early matches stream immediately
+// - recent matches are buffered for finalization
+// - a transition marker communicates any hidden matches between them
 //
 // Marker formats:
 //   First:  [... 36 lines truncated, match 1 shown ...]
 //   Next:   [... 23 lines truncated, match 2 shown ...]
-//   At -m:  [... 31 lines truncated, match 5/5 shown ...]
+//   Jump:   [... 31 lines and 54 matches truncated, match 58 shown ...]
 //   End:    [... 48 lines and 208 matches truncated (213 total) ...]
 //
-// When all matches shown (didn't hit -m limit):
+// When all selected matches are shown and no final-gap matches remain:
 //   Each:   [... 24 lines truncated, match 1 shown ...]
 //   After:  [... 48 lines truncated ...]
 //
 // Zero matches:
 //   [... 980 lines truncated, 0 matches found ...]
 //
-// The "(N total)" only appears on the end marker — we stream matches as
-// found, so the total isn't known until EOF. The "N/N" notation only
-// appears when the -m limit is hit.
+// The "(N total)" only appears on the end marker for hidden matches in the
+// final gap before the line tail.
 //
 // Test cases:
-// - Single match (didn't hit limit): "match 1 shown", end marker plain
-// - 5 shown out of 11 (-m 5): "match 5/5 shown", end marker "(11 total)"
-// - All matches shown, didn't hit limit: no "N/N", end marker plain
+// - Single match: "match 1 shown", end marker plain
+// - Head/tail selection with a middle gap: transition marker uses global numbering
+// - All matches shown: no transition marker, end marker plain
 // - End marker with remaining: "N lines and M matches truncated (T total)"
 // - End marker with 0 remaining: just "N lines truncated" (no matches mentioned)
 // - Zero matches found: "0 matches found"
-// - Total match count must include matches AFTER the cutoff (requires scanning all input)
+// - Hidden-count calculations must include matches beyond the streamed head
 
 mod pattern_informative_markers {
     use super::*;
@@ -462,7 +463,7 @@ mod pattern_informative_markers {
 
     #[test]
     fn earlier_matches_no_denominator() {
-        // With -m 5 and enough matches, match 1 and 2 should NOT say "1/5"
+        // Global numbering no longer uses any N/N notation.
         let match_positions: Vec<usize> = (20..=70).step_by(10).collect(); // 6 matches
         let input = generate_lines_with_matches(100, &match_positions, "ERROR");
 
@@ -474,7 +475,6 @@ mod pattern_informative_markers {
             .success();
 
         let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
-        // "match 1 shown" should appear, NOT "match 1/5 shown"
         assert!(
             stdout.contains("match 1 shown"),
             "Earlier matches should just say 'match N shown'. Got:\n{}",

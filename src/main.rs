@@ -3,8 +3,8 @@
 //! Shows the first N and last M lines of stdin, with an optional
 //! pattern-matching mode that extracts matches from the middle.
 //!
-//! Streams output: first lines appear immediately, early matches stream as found,
-//! and recent matches/tail wait for EOF.
+//! Streams output: first lines and early matches appear immediately, while
+//! recent matches and the final tail are emitted during finalization.
 
 use clap::Parser;
 use std::io;
@@ -42,11 +42,11 @@ struct Args {
     #[arg(short = 'm', long = "matches", default_value = "3")]
     matches: usize,
 
-    /// Number of earliest matches to show in pattern mode
+    /// Number of earliest matches to show in pattern mode (overrides --matches for the first side)
     #[arg(long = "match-first")]
     match_first: Option<usize>,
 
-    /// Number of latest matches to show in pattern mode
+    /// Number of latest matches to show in pattern mode (overrides --matches for the last side)
     #[arg(long = "match-last")]
     match_last: Option<usize>,
 

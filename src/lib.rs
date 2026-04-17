@@ -232,7 +232,7 @@ struct Truncator {
     pattern: Option<Regex>,
     line_number: usize,
     head_output_count: usize,
-    head_matches_shown: usize,
+    streamed_match_count: usize,
     total_matches: usize,
     last_output_line: usize,
     match_output_ranges: Vec<(usize, usize)>,
@@ -248,6 +248,49 @@ struct MatchGroup {
     start_line: usize,
     end_line: usize,
     lines: Vec<(usize, String)>,
+}
+
+struct PatternFinishState {
+    tail_groups: Vec<MatchGroup>,
+    hidden_transition_matches: usize,
+    hidden_final_gap_matches: usize,
+}
+
+impl MatchGroup {
+    fn new(
+        match_number: usize,
+        match_line: usize,
+        context_size: usize,
+        leading_context: &VecDeque<(usize, String)>,
+        match_content: &str,
+    ) -> Self {
+        let start_line = match_line.saturating_sub(context_size);
+        let end_line = match_line + context_size;
+
+        let mut lines = Vec::new();
+        for (line_number, content) in leading_context {
+            if *line_number >= start_line && *line_number < match_line {
+                lines.push((*line_number, content.clone()));
+            }
+        }
+        lines.push((match_line, match_content.to_string()));
+
+        Self {
+            match_number,
+            start_line,
+            end_line,
+            lines,
+        }
+    }
+
+    fn push_line_if_in_range(&mut self, line_number: usize, content: &str) {
+        if line_number > self.start_line
+            && line_number <= self.end_line
+            && self.lines.last().map(|(number, _)| *number) != Some(line_number)
+        {
+            self.lines.push((line_number, content.to_string()));
+        }
+    }
 }
 
 impl Truncator {
@@ -267,7 +310,7 @@ impl Truncator {
             pattern,
             line_number: 0,
             head_output_count: 0,
-            head_matches_shown: 0,
+            streamed_match_count: 0,
             total_matches: 0,
             last_output_line: 0,
             match_output_ranges: Vec::new(),
@@ -323,7 +366,7 @@ impl Truncator {
         output: &mut Output<W>,
         content: &str,
     ) -> io::Result<()> {
-        self.extend_deferred_match_groups(content);
+        self.append_line_to_deferred_match_groups(content);
 
         if self.after_context_remaining > 0 {
             self.stream_after_context_line(output, content)?;
@@ -331,7 +374,7 @@ impl Truncator {
 
         if self.is_match(content) {
             self.total_matches += 1;
-            self.capture_match_group();
+            self.capture_match_group(content);
 
             if self.can_show_another_head_match() {
                 self.show_streamed_match(output, content)?;
@@ -361,7 +404,7 @@ impl Truncator {
     }
 
     fn can_show_another_head_match(&self) -> bool {
-        self.head_matches_shown() < self.match_first_count
+        self.streamed_match_count < self.match_first_count
     }
 
     fn show_streamed_match<W: Write>(
@@ -370,7 +413,7 @@ impl Truncator {
         content: &str,
     ) -> io::Result<()> {
         let match_number = self.total_matches;
-        self.head_matches_shown += 1;
+        self.streamed_match_count += 1;
 
         let lines_truncated =
             self.lines_truncated_before_line(self.line_number.saturating_sub(self.context_size));
@@ -421,55 +464,28 @@ impl Truncator {
         match_number == 1 && self.last_output_line >= self.first_count
     }
 
-    fn head_matches_shown(&self) -> usize {
-        self.head_matches_shown
-    }
-
-    fn capture_match_group(&mut self) {
+    fn capture_match_group(&mut self, content: &str) {
         if self.match_last_count == 0 {
             return;
         }
 
-        let match_number = self.total_matches;
-        let start_line = self.line_number.saturating_sub(self.context_size);
-        let end_line = self.line_number + self.context_size;
-
-        let mut lines = Vec::new();
-        for (line_number, content) in &self.context_buffer {
-            if *line_number >= start_line && *line_number < self.line_number {
-                lines.push((*line_number, content.clone()));
-            }
-        }
-        lines.push((self.line_number, self.current_line_content()));
-
-        self.deferred_match_groups.push_back(MatchGroup {
-            match_number,
-            start_line,
-            end_line,
-            lines,
-        });
+        self.deferred_match_groups.push_back(MatchGroup::new(
+            self.total_matches,
+            self.line_number,
+            self.context_size,
+            &self.context_buffer,
+            content,
+        ));
 
         while self.deferred_match_groups.len() > self.match_last_count {
             self.deferred_match_groups.pop_front();
         }
     }
 
-    fn extend_deferred_match_groups(&mut self, content: &str) {
+    fn append_line_to_deferred_match_groups(&mut self, content: &str) {
         for group in &mut self.deferred_match_groups {
-            if self.line_number > group.start_line
-                && self.line_number <= group.end_line
-                && group.lines.last().map(|(n, _)| *n) != Some(self.line_number)
-            {
-                group.lines.push((self.line_number, content.to_string()));
-            }
+            group.push_line_if_in_range(self.line_number, content);
         }
-    }
-
-    fn current_line_content(&self) -> String {
-        self.tail_buffer
-            .back()
-            .map(|(_, content)| content.clone())
-            .unwrap_or_default()
     }
 
     fn replay_pending_context<W: Write>(&mut self, output: &mut Output<W>) -> io::Result<()> {
@@ -505,17 +521,7 @@ impl Truncator {
         let needs_truncation = total_lines > self.first_count + self.last_count;
 
         if self.pattern.is_some() {
-            if let Some(marker) = self.transition_marker(reason) {
-                output.write_line(&marker)?;
-            }
-
-            self.write_deferred_match_groups(output)?;
-
-            if let Some(marker) =
-                self.final_pattern_tail_marker(reason, tail_start, needs_truncation)
-            {
-                output.write_line(&marker)?;
-            }
+            self.finish_pattern_output(output, reason, tail_start, needs_truncation)?;
         } else if let Some(marker) = self.final_default_marker(reason, needs_truncation) {
             output.write_line(&marker)?;
         }
@@ -530,14 +536,62 @@ impl Truncator {
         output.flush()
     }
 
+    fn finish_pattern_output<W: Write>(
+        &mut self,
+        output: &mut Output<W>,
+        reason: FinishReason,
+        tail_start: usize,
+        needs_truncation: bool,
+    ) -> io::Result<()> {
+        let finish_state = self.pattern_finish_state();
+
+        if let Some(marker) = self.transition_marker(reason, &finish_state) {
+            output.write_line(&marker)?;
+        }
+
+        self.write_deferred_match_groups(output, &finish_state.tail_groups)?;
+
+        if let Some(marker) =
+            self.final_pattern_tail_marker(reason, tail_start, needs_truncation, &finish_state)
+        {
+            output.write_line(&marker)?;
+        }
+
+        Ok(())
+    }
+
+    fn pattern_finish_state(&self) -> PatternFinishState {
+        let tail_groups: Vec<MatchGroup> = self
+            .deferred_match_groups
+            .iter()
+            .filter(|group| group.match_number > self.streamed_match_count)
+            .cloned()
+            .collect();
+        let hidden_transition_matches = self
+            .total_matches
+            .saturating_sub(self.streamed_match_count + tail_groups.len());
+        let hidden_final_gap_matches = if tail_groups.is_empty() {
+            self.total_matches.saturating_sub(self.streamed_match_count)
+        } else {
+            0
+        };
+
+        PatternFinishState {
+            tail_groups,
+            hidden_transition_matches,
+            hidden_final_gap_matches,
+        }
+    }
+
     fn final_pattern_tail_marker(
         &self,
         reason: FinishReason,
         tail_start: usize,
         needs_truncation: bool,
+        finish_state: &PatternFinishState,
     ) -> Option<String> {
         if self.total_matches > 0 {
-            return self.final_pattern_marker_with_matches(reason, tail_start);
+            return self.final_pattern_marker_with_matches(reason, tail_start, finish_state);
         }
 
         if !needs_truncation {
@@ -562,9 +616,10 @@ impl Truncator {
         &self,
         reason: FinishReason,
         tail_start: usize,
+        finish_state: &PatternFinishState,
     ) -> Option<String> {
         let lines_truncated = self.lines_truncated_before_tail(tail_start);
-        let remaining_matches = self.hidden_matches_in_final_gap();
+        let remaining_matches = finish_state.hidden_final_gap_matches;
 
         if lines_truncated == 0 && remaining_matches == 0 {
             return None;
@@ -588,40 +643,13 @@ impl Truncator {
         gap_end.saturating_sub(gap_start)
     }
 
-    fn hidden_matches_before_tail(&self) -> usize {
-        self.total_matches - self.total_matches_emitted()
-    }
-
-    fn total_matches_emitted(&self) -> usize {
-        self.head_matches_shown() + self.deferred_match_groups_to_emit().len()
-    }
-
-    fn hidden_matches_between_head_and_tail(&self) -> usize {
-        let head = self.head_matches_shown();
-        let tail = self.deferred_match_groups_to_emit().len();
-        self.total_matches.saturating_sub(head + tail)
-    }
-
-    fn hidden_matches_in_final_gap(&self) -> usize {
-        if self.deferred_match_groups_to_emit().is_empty() {
-            self.hidden_matches_before_tail()
-        } else {
-            0
-        }
-    }
-
-    fn deferred_match_groups_to_emit(&self) -> Vec<MatchGroup> {
-        self.deferred_match_groups
-            .iter()
-            .filter(|group| group.match_number > self.head_matches_shown())
-            .cloned()
-            .collect()
-    }
-
-    fn transition_marker(&self, reason: FinishReason) -> Option<String> {
-        let first_tail_group = self.deferred_match_groups_to_emit().into_iter().next()?;
-        let hidden_matches = self.hidden_matches_between_head_and_tail();
-        if hidden_matches == 0 {
+    fn transition_marker(
+        &self,
+        reason: FinishReason,
+        finish_state: &PatternFinishState,
+    ) -> Option<String> {
+        let first_tail_group = finish_state.tail_groups.first()?;
+        if finish_state.hidden_transition_matches == 0 {
             return None;
         }
         let lines_truncated = self.lines_truncated_before_line(first_tail_group.start_line);
@@ -629,23 +657,32 @@ impl Truncator {
         Some(match reason {
             FinishReason::Interrupted(_) => format!(
                 "[... {} lines and {} matches truncated, match {} shown, interrupted ...]",
-                lines_truncated, hidden_matches, first_tail_group.match_number
+                lines_truncated,
+                finish_state.hidden_transition_matches,
+                first_tail_group.match_number
             ),
             FinishReason::Completed => format!(
                 "[... {} lines and {} matches truncated, match {} shown ...]",
-                lines_truncated, hidden_matches, first_tail_group.match_number
+                lines_truncated,
+                finish_state.hidden_transition_matches,
+                first_tail_group.match_number
             ),
         })
     }
 
-    fn write_deferred_match_groups<W: Write>(&mut self, output: &mut Output<W>) -> io::Result<()> {
-        let groups = self.deferred_match_groups_to_emit();
-        for (index, group) in groups.iter().enumerate() {
-            let needs_marker = if index == 0 {
-                self.transition_marker(FinishReason::Completed).is_none()
-            } else {
-                true
-            };
+    fn write_deferred_match_groups<W: Write>(
+        &mut self,
+        output: &mut Output<W>,
+        tail_groups: &[MatchGroup],
+    ) -> io::Result<()> {
+        let has_transition_marker = !tail_groups.is_empty()
+            && self
+                .total_matches
+                .saturating_sub(self.streamed_match_count + tail_groups.len())
+                > 0;
+
+        for (index, group) in tail_groups.iter().enumerate() {
+            let needs_marker = index > 0 || !has_transition_marker;
 
             if needs_marker {
                 let lines_truncated = self.lines_truncated_before_line(group.start_line);

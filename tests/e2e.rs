@@ -1292,8 +1292,8 @@ mod output_size {
     // - Total: 60 * 221 + 1 * 31 = 13291 bytes (each line + newline)
     const DEFAULT_MAX_CHARS: usize = 13400;
 
-    // Pattern mode worst case:
-    // - Lines: ~101 max (30 first + 6 markers + 35 match context lines + 30 last)
+    // Pattern mode worst case with default 3+3 match head/tail selection:
+    // - Lines: ~101 max (30 first + 6 markers + 35 match/context lines + 30 last)
     // - Content lines: 220 chars each
     // - Marker lines: ~55 chars each (e.g. "[... 99 lines and 99 matches truncated (99 total) ...]")
     // - Total: 95 * 221 + 6 * 56 = 21331 bytes
@@ -1372,8 +1372,8 @@ mod output_size {
 
     #[test]
     fn pattern_mode_max_lines() {
-        // Maximum lines in pattern mode with ellipsis separators:
-        // 30 first + 1 "[... matches follow ...]" + 35 (5 matches * 7 context) + 4 "[...]" + 1 "[... matches end ...]" + 30 last = 101
+        // Maximum lines in pattern mode with default 3+3 match head/tail selection:
+        // 30 first + 6 markers + 35 match/context lines + 30 last = 101
 
         let match_positions: Vec<usize> = vec![50, 60, 70, 80, 90];
         let input = generate_lines_with_matches(200, &match_positions, "ERROR");
@@ -1491,7 +1491,7 @@ mod streaming {
 
     #[test]
     fn matches_stream_as_they_arrive() {
-        // In pattern mode, matches should stream as they're found
+        // In pattern mode, early matches should stream before stdin closes.
         // We verify by checking output arrives BEFORE stdin is closed
         let mut child = Command::new(trunc_bin())
             .arg("ERROR")
