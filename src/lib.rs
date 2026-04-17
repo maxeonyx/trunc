@@ -230,7 +230,6 @@ struct Truncator {
     pattern: Option<Regex>,
     line_number: usize,
     head_output_count: usize,
-    in_middle: bool,
     matches_shown: usize,
     total_matches: usize,
     last_output_line: usize,
@@ -256,7 +255,6 @@ impl Truncator {
             pattern,
             line_number: 0,
             head_output_count: 0,
-            in_middle: false,
             matches_shown: 0,
             total_matches: 0,
             last_output_line: 0,
@@ -270,95 +268,150 @@ impl Truncator {
     fn process_line<W: Write>(&mut self, content: &str, output: &mut Output<W>) -> io::Result<()> {
         self.line_number += 1;
 
-        if self.head_output_count < self.first_count {
-            output.write_line_and_flush(&truncate_line(content, self.width))?;
-            self.head_output_count += 1;
-            self.last_output_line = self.line_number;
+        if self.should_stream_head() {
+            self.stream_head_line(output, content)?;
             return Ok(());
         }
 
-        if !self.in_middle {
-            self.in_middle = true;
+        self.buffer_tail_line(content);
+
+        if self.pattern.is_some() {
+            self.process_pattern_line(output, content)?;
         }
 
+        Ok(())
+    }
+
+    fn should_stream_head(&self) -> bool {
+        self.head_output_count < self.first_count
+    }
+
+    fn stream_head_line<W: Write>(
+        &mut self,
+        output: &mut Output<W>,
+        content: &str,
+    ) -> io::Result<()> {
+        output.write_line_and_flush(&truncate_line(content, self.width))?;
+        self.head_output_count += 1;
+        self.last_output_line = self.line_number;
+        Ok(())
+    }
+
+    fn buffer_tail_line(&mut self, content: &str) {
         self.tail_buffer
             .push_back((self.line_number, content.to_string()));
         if self.tail_buffer.len() > self.last_count {
             self.tail_buffer.pop_front();
         }
+    }
 
-        let is_match = self
-            .pattern
-            .as_ref()
-            .is_some_and(|regex| regex.is_match(content));
+    fn process_pattern_line<W: Write>(
+        &mut self,
+        output: &mut Output<W>,
+        content: &str,
+    ) -> io::Result<()> {
+        if self.after_context_remaining > 0 {
+            self.stream_after_context_line(output, content)?;
+        }
 
-        if self.pattern.is_some() {
-            if self.after_context_remaining > 0 {
-                if self.line_number > self.last_output_line {
-                    self.write_streamed_line(output, self.line_number, content)?;
-                }
-                self.after_context_remaining -= 1;
-            }
+        if self.is_match(content) {
+            self.total_matches += 1;
 
-            if is_match {
-                self.total_matches += 1;
-
-                if self.matches_shown < self.max_matches {
-                    self.matches_shown += 1;
-
-                    let context_start = self.line_number.saturating_sub(self.context_size);
-                    let gap_start = self.last_output_line + 1;
-                    let gap_end = context_start.max(gap_start);
-                    let lines_truncated = gap_end.saturating_sub(gap_start);
-
-                    let match_annotation = if self.matches_shown == self.max_matches {
-                        format!("match {}/{}", self.matches_shown, self.max_matches)
-                    } else {
-                        format!("match {}", self.matches_shown)
-                    };
-
-                    if lines_truncated > 0 {
-                        output.write_line_and_flush(&format!(
-                            "[... {} lines truncated, {} shown ...]",
-                            lines_truncated, match_annotation
-                        ))?;
-                    } else if self.matches_shown == 1 && self.last_output_line >= self.first_count {
-                        output.write_line_and_flush(&format!(
-                            "[... 0 lines truncated, {} shown ...]",
-                            match_annotation
-                        ))?;
-                    }
-
-                    let pending_context: Vec<(usize, String)> =
-                        self.context_buffer.iter().cloned().collect();
-                    for (context_line_number, context_content) in pending_context {
-                        if context_line_number > self.last_output_line
-                            && context_line_number < self.line_number
-                        {
-                            self.write_streamed_line(
-                                output,
-                                context_line_number,
-                                &context_content,
-                            )?;
-                        }
-                    }
-
-                    if self.line_number > self.last_output_line {
-                        self.write_streamed_line(output, self.line_number, content)?;
-                    }
-
-                    self.after_context_remaining = self.context_size;
-                }
-            }
-
-            self.context_buffer
-                .push_back((self.line_number, content.to_string()));
-            if self.context_buffer.len() > self.context_size {
-                self.context_buffer.pop_front();
+            if self.can_show_another_match() {
+                self.show_match(output, content)?;
             }
         }
 
+        self.buffer_context_line(content);
         Ok(())
+    }
+
+    fn stream_after_context_line<W: Write>(
+        &mut self,
+        output: &mut Output<W>,
+        content: &str,
+    ) -> io::Result<()> {
+        if self.line_number > self.last_output_line {
+            self.write_streamed_line(output, self.line_number, content)?;
+        }
+        self.after_context_remaining -= 1;
+        Ok(())
+    }
+
+    fn is_match(&self, content: &str) -> bool {
+        self.pattern
+            .as_ref()
+            .is_some_and(|regex| regex.is_match(content))
+    }
+
+    fn can_show_another_match(&self) -> bool {
+        self.matches_shown < self.max_matches
+    }
+
+    fn show_match<W: Write>(&mut self, output: &mut Output<W>, content: &str) -> io::Result<()> {
+        self.matches_shown += 1;
+
+        self.write_match_marker(output)?;
+        self.replay_pending_context(output)?;
+
+        if self.line_number > self.last_output_line {
+            self.write_streamed_line(output, self.line_number, content)?;
+        }
+
+        self.after_context_remaining = self.context_size;
+        Ok(())
+    }
+
+    fn write_match_marker<W: Write>(&mut self, output: &mut Output<W>) -> io::Result<()> {
+        let lines_truncated = self.lines_truncated_before_current_match();
+
+        if lines_truncated > 0 || self.should_show_zero_gap_match_marker() {
+            output.write_line_and_flush(&format!(
+                "[... {} lines truncated, {} shown ...]",
+                lines_truncated,
+                self.match_annotation()
+            ))?;
+        }
+
+        Ok(())
+    }
+
+    fn lines_truncated_before_current_match(&self) -> usize {
+        let context_start = self.line_number.saturating_sub(self.context_size);
+        let gap_start = self.last_output_line + 1;
+        let gap_end = context_start.max(gap_start);
+        gap_end.saturating_sub(gap_start)
+    }
+
+    fn should_show_zero_gap_match_marker(&self) -> bool {
+        self.matches_shown == 1 && self.last_output_line >= self.first_count
+    }
+
+    fn match_annotation(&self) -> String {
+        if self.matches_shown == self.max_matches {
+            format!("match {}/{}", self.matches_shown, self.max_matches)
+        } else {
+            format!("match {}", self.matches_shown)
+        }
+    }
+
+    fn replay_pending_context<W: Write>(&mut self, output: &mut Output<W>) -> io::Result<()> {
+        let pending_context: Vec<(usize, String)> = self.context_buffer.iter().cloned().collect();
+        for (context_line_number, context_content) in pending_context {
+            if context_line_number > self.last_output_line && context_line_number < self.line_number
+            {
+                self.write_streamed_line(output, context_line_number, &context_content)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn buffer_context_line(&mut self, content: &str) {
+        self.context_buffer
+            .push_back((self.line_number, content.to_string()));
+        if self.context_buffer.len() > self.context_size {
+            self.context_buffer.pop_front();
+        }
     }
 
     fn finish<W: Write>(&mut self, output: &mut Output<W>, reason: FinishReason) -> io::Result<()> {
@@ -407,28 +460,8 @@ impl Truncator {
         tail_start: usize,
         needs_truncation: bool,
     ) -> Option<String> {
-        if self.matches_shown > 0 {
-            let gap_start = self.last_output_line + 1;
-            let gap_end = tail_start;
-            let lines_truncated = gap_end.saturating_sub(gap_start);
-            let remaining_matches = self.total_matches - self.matches_shown;
-
-            if lines_truncated == 0 && remaining_matches == 0 {
-                return None;
-            }
-
-            return Some(match reason {
-                FinishReason::Interrupted(_) => {
-                    interrupted_marker(lines_truncated, remaining_matches, self.total_matches)
-                }
-                FinishReason::Completed if remaining_matches > 0 => format!(
-                    "[... {} lines and {} matches truncated ({} total) ...]",
-                    lines_truncated, remaining_matches, self.total_matches
-                ),
-                FinishReason::Completed => {
-                    format!("[... {} lines truncated ...]", lines_truncated)
-                }
-            });
+        if self.total_matches > 0 {
+            return self.final_pattern_marker_with_matches(reason, tail_start);
         }
 
         if !needs_truncation {
@@ -447,6 +480,40 @@ impl Truncator {
                 )
             }
         })
+    }
+
+    fn final_pattern_marker_with_matches(
+        &self,
+        reason: FinishReason,
+        tail_start: usize,
+    ) -> Option<String> {
+        let lines_truncated = self.lines_truncated_before_tail(tail_start);
+        let remaining_matches = self.remaining_matches();
+
+        if lines_truncated == 0 && remaining_matches == 0 {
+            return None;
+        }
+
+        Some(match reason {
+            FinishReason::Interrupted(_) => {
+                interrupted_marker(lines_truncated, remaining_matches, self.total_matches)
+            }
+            FinishReason::Completed if remaining_matches > 0 => format!(
+                "[... {} lines and {} matches truncated ({} total) ...]",
+                lines_truncated, remaining_matches, self.total_matches
+            ),
+            FinishReason::Completed => format!("[... {} lines truncated ...]", lines_truncated),
+        })
+    }
+
+    fn lines_truncated_before_tail(&self, tail_start: usize) -> usize {
+        let gap_start = self.last_output_line + 1;
+        let gap_end = tail_start;
+        gap_end.saturating_sub(gap_start)
+    }
+
+    fn remaining_matches(&self) -> usize {
+        self.total_matches - self.matches_shown
     }
 
     fn final_default_marker(&self, reason: FinishReason, needs_truncation: bool) -> Option<String> {

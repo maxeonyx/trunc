@@ -619,6 +619,35 @@ mod pattern_informative_markers {
     }
 
     #[test]
+    fn zero_match_limit_reports_truncated_matches() {
+        let input = generate_lines_with_matches(100, &[30, 50, 70], "ERROR");
+
+        let mut cmd = trunc();
+        let assert = cmd
+            .args(["-f", "10", "-l", "10", "-m", "0", "ERROR"])
+            .write_stdin(input)
+            .assert()
+            .success();
+
+        let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+        assert!(
+            !stdout.contains("0 matches found"),
+            "Should not claim no matches were found when -m 0 hides them. Got:\n{}",
+            stdout
+        );
+        assert!(
+            stdout.contains("3 matches truncated"),
+            "Should report hidden matches when -m 0. Got:\n{}",
+            stdout
+        );
+        assert!(
+            stdout.contains("(3 total)"),
+            "Should report the total hidden matches when -m 0. Got:\n{}",
+            stdout
+        );
+    }
+
+    #[test]
     fn total_includes_matches_past_cutoff() {
         // Ensure the total count includes matches that occur AFTER we stop showing.
         // 20 matches spread across middle, showing only 5 → total should be 20.
