@@ -104,11 +104,13 @@ Options:
   -l, --last <N>      Number of lines to show from end (default: 30)
   -H, --head <N>      Alias for --first
   -T, --tail <N>      Alias for --last
-  -m, --matches <N>   Max matches to show in pattern mode (default: 5)
-  -C, --context <N>   Lines of context around each match (default: 3)
-  -w, --width <N>     Chars to show at start/end of long lines (default: 100, 0 = no limit)
-  -h, --help          Print help
-  -V, --version       Print version
+  -m, --matches <N>       Match head/tail count — sets both --match-first and --match-last (default: 3)
+  --match-first <N>       First N matches to show from middle (overrides -m for this side)
+  --match-last <N>        Last N matches to show from middle (overrides -m for this side)
+  -C, --context <N>       Lines of context around each match (default: 3)
+  -w, --width <N>         Chars to show at start/end of long lines (default: 100, 0 = no limit)
+  -h, --help              Print help
+  -V, --version           Print version
 ```
 
 ### Line Truncation
@@ -133,7 +135,7 @@ All markers include the count of lines truncated. In pattern mode, markers also 
 <last L lines>
 ```
 
-**Pattern mode (5 shown out of 213 total):**
+**Pattern mode (6 shown out of 60 total, first 3 + last 3):**
 
 ```
 <first F lines>
@@ -141,9 +143,15 @@ All markers include the count of lines truncated. In pattern mode, markers also 
 <context + match 1>
 [... 23 lines truncated, match 2 shown ...]
 <context + match 2>
-[... 31 lines truncated, match 5/5 shown ...]
-<context + match 5>
-[... 48 lines and 208 matches truncated (213 total) ...]
+[... 31 lines truncated, match 3 shown ...]
+<context + match 3>
+[... 412 lines and 54 matches truncated, match 58 shown ...]
+<context + match 58>
+[... 18 lines truncated, match 59 shown ...]
+<context + match 59>
+[... 27 lines truncated, match 60 shown ...]
+<context + match 60>
+[... 48 lines truncated ...]
 <last L lines>
 ```
 
@@ -175,8 +183,10 @@ All markers include the count of lines truncated. In pattern mode, markers also 
 
 Notes:
 
+- Pattern matches follow head/tail philosophy: show first N and last M matches, elide the middle
+- Early matches (match-first) stream immediately; recent matches (match-last) are buffered until EOF/interruption, like tail lines
+- The transition marker between head and tail matches reports hidden matches in that gap
 - The "(N total)" annotation only appears on the end marker, when total > shown
-- The "N/N" notation only appears when the match limit (-m) is hit — otherwise just "match N"
 - Adjacent matches (overlapping contexts) are merged without a marker between them
 - If input is short enough (≤ F + L lines), output is unchanged with no separator
 - On `SIGINT`/`SIGTERM`, `trunc` flushes the tail buffer before exiting and uses exit codes 130/143

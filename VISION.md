@@ -68,12 +68,13 @@ Shows:
 
 1. First 30 lines
 2. `[... 36 lines truncated, match 1 shown ...]`
-3. Up to 5 matches from the middle, each with 3 lines of context on either side
-4. `[... 23 lines truncated, match 2 shown ...]` between non-contiguous match groups
-5. `[... 48 lines and 208 matches truncated (213 total) ...]` before the tail
-6. Last 30 lines
+3. First 3 matches from the middle, each with 3 lines of context on either side
+4. `[... 412 lines and 54 matches truncated, match 58 shown ...]` transition to recent matches
+5. Last 3 matches from the middle, each with 3 lines of context
+6. `[... 48 lines truncated ...]` before the tail
+7. Last 30 lines
 
-When all matches are shown, the end marker omits the match count. When the match limit (-m) is hit, the last shown match says "match N/N". When 0 matches found: `[... 980 lines truncated, 0 matches found ...]`
+Pattern matches follow head/tail philosophy: show first N and last M matches, elide the middle. Early matches stream immediately; recent matches are buffered until EOF/interruption, like tail lines. When all matches fit (≤ match-first + match-last), they're all shown with no elision. When 0 matches found: `[... 980 lines truncated, 0 matches found ...]`
 
 ## Output Size Guarantees
 
@@ -82,14 +83,14 @@ With defaults, output size is bounded. The marker format is longer than before (
 | Mode | Max Lines | Notes |
 | --- | --- | --- |
 | Default | 61 | 30 first + 1 marker + 30 last |
-| Pattern | ~101 | 30 first + 5×(1 marker + 7 context) + 1 end marker + 30 last |
+| Pattern | ~109 | 30 first + 6×(1 marker + 7 context) + 1 end marker + 30 last |
 
 These bounds apply to the portion of the stream actually received. If the input is interrupted early, `trunc` finalizes from the data seen so far rather than assuming more input will arrive.
 
 ## Design Principles
 
 1. **Fast and simple.** Single binary, minimal dependencies, streams input.
-2. **Streaming output.** First lines appear immediately; matches stream as found. Only final tail output waits for EOF or interruption-triggered finalization.
+2. **Streaming output.** First lines appear immediately; early matches stream as found. Recent matches and tail lines wait for EOF or interruption-triggered finalization.
 3. **Predictable output size.** The user can calculate max output before running, and interruption still stays bounded by the data received so far.
 4. **Zero config for common case.** Defaults are sensible; options are rare.
 5. **Grep-compatible patterns.** Regex syntax should feel familiar.
