@@ -402,9 +402,8 @@ mod pattern_mode {
     }
 
     #[test]
-    fn pattern_mode_limits_to_5_matches_by_default() {
-        // Create input with 10 matches in the middle section
-        let match_positions: Vec<usize> = (40..=90).step_by(5).collect(); // 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90 = 11 matches in middle
+    fn pattern_mode_defaults_to_first_3_and_last_3_matches() {
+        let match_positions = vec![40, 50, 60, 70, 80, 90, 100, 110];
         let input = generate_lines_with_matches(200, &match_positions, "ERROR");
 
         let mut cmd = trunc();
@@ -412,26 +411,121 @@ mod pattern_mode {
 
         let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
 
-        // Count how many match lines appear
-        let match_count = stdout.matches("contains ERROR").count();
-        assert_eq!(match_count, 5, "Should show exactly 5 matches by default");
+        for shown in [40, 50, 60, 90, 100, 110] {
+            assert!(
+                stdout.contains(&format!("line {} contains ERROR", shown)),
+                "Should show match at line {}. Got:\n{}",
+                shown,
+                stdout
+            );
+        }
+
+        for hidden in [70, 80] {
+            assert!(
+                !stdout.contains(&format!("line {} contains ERROR", hidden)),
+                "Should omit middle match at line {}. Got:\n{}",
+                hidden,
+                stdout
+            );
+        }
     }
 
     #[test]
-    fn pattern_mode_custom_match_limit() {
-        let match_positions: Vec<usize> = (40..=90).step_by(5).collect();
+    fn matches_shorthand_sets_both_match_sides() {
+        let match_positions = vec![40, 50, 60, 70, 80, 90, 100, 110];
         let input = generate_lines_with_matches(200, &match_positions, "ERROR");
 
         let mut cmd = trunc();
         let assert = cmd
-            .args(["-m", "3", "ERROR"])
+            .args(["-m", "2", "ERROR"])
             .write_stdin(input)
             .assert()
             .success();
 
         let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
-        let match_count = stdout.matches("contains ERROR").count();
-        assert_eq!(match_count, 3, "Should show exactly 3 matches with -m 3");
+
+        for shown in [40, 50, 100, 110] {
+            assert!(
+                stdout.contains(&format!("line {} contains ERROR", shown)),
+                "Should show match at line {} when -m 2 sets both sides. Got:\n{}",
+                shown,
+                stdout
+            );
+        }
+
+        for hidden in [60, 70, 80, 90] {
+            assert!(
+                !stdout.contains(&format!("line {} contains ERROR", hidden)),
+                "Should omit middle match at line {} when -m 2 sets both sides. Got:\n{}",
+                hidden,
+                stdout
+            );
+        }
+    }
+
+    #[test]
+    fn explicit_match_side_flags_override_matches_shorthand() {
+        let match_positions = vec![40, 50, 60, 70, 80, 90, 100, 110];
+        let input = generate_lines_with_matches(200, &match_positions, "ERROR");
+
+        let mut cmd = trunc();
+        let assert = cmd
+            .args(["-m", "5", "--match-last", "1", "ERROR"])
+            .write_stdin(input)
+            .assert()
+            .success();
+
+        let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+
+        for shown in [40, 50, 60, 70, 80, 110] {
+            assert!(
+                stdout.contains(&format!("line {} contains ERROR", shown)),
+                "Should show match at line {}. Got:\n{}",
+                shown,
+                stdout
+            );
+        }
+
+        for hidden in [90, 100] {
+            assert!(
+                !stdout.contains(&format!("line {} contains ERROR", hidden)),
+                "Should omit match at line {} when explicit --match-last 1 overrides -m 5. Got:\n{}",
+                hidden,
+                stdout
+            );
+        }
+    }
+
+    #[test]
+    fn match_first_zero_shows_only_recent_matches() {
+        let match_positions = vec![40, 50, 60, 70, 80, 90, 100, 110];
+        let input = generate_lines_with_matches(200, &match_positions, "ERROR");
+
+        let mut cmd = trunc();
+        let assert = cmd
+            .args(["--match-first", "0", "--match-last", "2", "ERROR"])
+            .write_stdin(input)
+            .assert()
+            .success();
+
+        let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+
+        for shown in [100, 110] {
+            assert!(
+                stdout.contains(&format!("line {} contains ERROR", shown)),
+                "Should show recent match at line {}. Got:\n{}",
+                shown,
+                stdout
+            );
+        }
+
+        for hidden in [40, 50, 60, 70, 80, 90] {
+            assert!(
+                !stdout.contains(&format!("line {} contains ERROR", hidden)),
+                "Should not stream early matches when --match-first 0. Got:\n{}",
+                stdout
+            );
+        }
     }
 
     #[test]

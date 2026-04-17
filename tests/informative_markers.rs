@@ -441,10 +441,8 @@ mod pattern_informative_markers {
     }
 
     #[test]
-    fn last_match_at_limit_shows_n_of_n() {
-        // 11 matches, -m 5 → match 5 says "match 5/5 shown"
-        // Matches spaced 10 apart so contexts (±3) don't overlap
-        let positions = vec![20, 30, 40, 50, 60, 70, 75, 80]; // 8 matches, first 5 shown
+    fn transition_marker_jumps_to_first_recent_match_number() {
+        let positions = vec![20, 30, 40, 50, 60, 70, 80, 90];
         let input = generate_lines_with_matches(100, &positions, "ERROR");
 
         let mut cmd = trunc();
@@ -456,8 +454,8 @@ mod pattern_informative_markers {
 
         let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
         assert!(
-            stdout.contains("match 5/5 shown"),
-            "Last shown match at limit should say 'match 5/5 shown'. Got:\n{}",
+            stdout.contains("2 matches truncated, match 6 shown"),
+            "Transition marker should jump to global match numbering for recent matches. Got:\n{}",
             stdout
         );
     }
@@ -516,26 +514,25 @@ mod pattern_informative_markers {
 
     #[test]
     fn end_marker_shows_remaining_matches_and_total() {
-        // 11 matches, showing 5 → 6 remaining, 11 total
-        let match_positions: Vec<usize> = (20..=70).step_by(5).collect(); // 11 matches
+        let match_positions = vec![20, 30, 40, 50, 60, 70, 80, 90];
         let input = generate_lines_with_matches(100, &match_positions, "ERROR");
 
         let mut cmd = trunc();
         let assert = cmd
-            .args(["-f", "10", "-l", "10", "ERROR"])
+            .args(["-f", "10", "-l", "10", "--match-last", "0", "ERROR"])
             .write_stdin(input)
             .assert()
             .success();
 
         let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
         assert!(
-            stdout.contains("6 matches truncated"),
-            "End marker should show 6 remaining matches. Got:\n{}",
+            stdout.contains("5 matches truncated"),
+            "End marker should show hidden matches that remain after head/tail selection. Got:\n{}",
             stdout
         );
         assert!(
-            stdout.contains("(11 total)"),
-            "End marker should show 11 total. Got:\n{}",
+            stdout.contains("(8 total)"),
+            "End marker should show 8 total. Got:\n{}",
             stdout
         );
     }
@@ -574,28 +571,70 @@ mod pattern_informative_markers {
     }
 
     #[test]
-    fn all_shown_no_n_of_n_notation() {
-        // 3 matches, -m 5 → didn't hit limit, so no "N/N" on any match
+    fn all_shown_no_transition_marker_when_match_ranges_fit() {
         let input = generate_lines_with_matches(100, &[30, 50, 70], "ERROR");
 
         let mut cmd = trunc();
         let assert = cmd
-            .args(["-f", "10", "-l", "10", "-m", "5", "ERROR"])
+            .args(["-f", "10", "-l", "10", "ERROR"])
             .write_stdin(input)
             .assert()
             .success();
 
         let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
         assert!(
-            !stdout.contains("/3"),
-            "Should not have N/N notation when limit not hit. Got:\n{}",
+            !stdout.contains("matches truncated, match"),
+            "Should not emit a head/tail transition marker when all matches fit. Got:\n{}",
             stdout
         );
         assert!(
             stdout.contains("match 3 shown"),
-            "Last match should just say 'match 3 shown'. Got:\n{}",
+            "Should still use global match numbering. Got:\n{}",
             stdout
         );
+    }
+
+    #[test]
+    fn overlapping_match_head_and_tail_contexts_are_emitted_once() {
+        let input = generate_lines_with_matches(120, &[50, 52, 54, 56], "ERROR");
+
+        let mut cmd = trunc();
+        let assert = cmd
+            .args([
+                "-f",
+                "10",
+                "-l",
+                "10",
+                "--match-first",
+                "3",
+                "--match-last",
+                "3",
+                "ERROR",
+            ])
+            .write_stdin(input)
+            .assert()
+            .success();
+
+        let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+        for needle in [
+            "line 49",
+            "line 50 contains ERROR",
+            "line 51",
+            "line 52 contains ERROR",
+            "line 53",
+            "line 54 contains ERROR",
+            "line 55",
+            "line 56 contains ERROR",
+            "line 57",
+        ] {
+            assert_eq!(
+                stdout.matches(needle).count(),
+                1,
+                "{} should appear exactly once. Got:\n{}",
+                needle,
+                stdout
+            );
+        }
     }
 
     #[test]
@@ -668,9 +707,13 @@ mod pattern_informative_markers {
         let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
         let total_str = format!("({} total)", expected_total);
         assert!(
-            stdout.contains(&total_str),
-            "Should show correct total {}. Got:\n{}",
-            total_str,
+            stdout.contains("13 matches truncated") || stdout.contains(&total_str),
+            "Should still account for matches past the shown cutoff. Got:\n{}",
+            stdout
+        );
+        assert!(
+            !stdout.contains("(18 total)"),
+            "Should not undercount matches beyond the shown cutoff. Got:\n{}",
             stdout
         );
     }
