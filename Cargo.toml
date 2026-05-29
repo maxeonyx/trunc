@@ -1,6 +1,6 @@
 [package]
 name = "trunc"
-version = "0.4.1"
+version = "0.4.2"
 edition = "2021"
 description = "Smart truncation for pipe output - like head+tail with grep-style pattern matching"
 license = "MIT"
@@ -15,4 +15,5 @@ regex = "1"
 
 [dev-dependencies]
 assert_cmd = "2"
+help-test = { path = "../../crates/help-test" }
 predicates = "3"
