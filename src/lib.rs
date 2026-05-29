@@ -740,9 +740,13 @@ impl Truncator {
     }
 
     fn was_output_in_match(&self, line_number: usize) -> bool {
+        let range_index = self
+            .match_output_ranges
+            .partition_point(|(_, end)| *end < line_number);
+
         self.match_output_ranges
-            .iter()
-            .any(|(start, end)| line_number >= *start && line_number <= *end)
+            .get(range_index)
+            .is_some_and(|(start, end)| line_number >= *start && line_number <= *end)
     }
 }
 
