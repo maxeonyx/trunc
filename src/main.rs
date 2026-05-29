@@ -11,12 +11,14 @@ use std::io;
 use std::process;
 use trunc::{run, Config, RunError, RunOutcome};
 
+const AFTER_HELP: &str = "Examples:\n  $ seq 1 100 | trunc\n  $ seq 1 100 | trunc -f 10 -l 20\n  $ printf '%s\\n' ok WARNING done | trunc WARNING\n  $ python3 -c \"print('x'*240); print('timeout after 30s'); print('y'*240)\" | trunc -w 20 timeout";
+
 /// Smart truncation for pipe output - like head+tail combined.
 ///
 /// Shows the first N and last M lines, with optional grep-style pattern matching
 /// to extract relevant lines from the middle.
 #[derive(Parser, Debug)]
-#[command(name = "trunc", version, about)]
+#[command(name = "trunc", version, about, after_help = AFTER_HELP)]
 struct Args {
     /// Number of lines to show from start
     #[arg(
