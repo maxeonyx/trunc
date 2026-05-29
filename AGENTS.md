@@ -1,6 +1,6 @@
 # trunc - Agent Instructions
 
-This file contains instructions for AI agents working on this project.
+This file contains instructions for AI agents working on this project. This tool is developed from the [agent-tools workspace](https://github.com/maxeonyx/agent-tools); clone and develop there, not from this repo directly.
 
 ## Project Overview
 

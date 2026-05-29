@@ -9,6 +9,7 @@ keywords = ["cli", "head", "tail", "truncate", "pipe"]
 categories = ["command-line-utilities"]
 
 [dependencies]
+agent-tools-updater = { path = "../../crates/agent-tools-updater" }
 clap = { version = "4", features = ["derive"] }
 libc = "0.2"
 regex = "1"
