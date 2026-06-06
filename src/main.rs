@@ -7,6 +7,7 @@
 //! recent matches and the final tail are emitted during finalization.
 
 use clap::Parser;
+use std::env;
 use std::io;
 use std::process;
 use trunc::{run, Config, RunError, RunOutcome};
@@ -79,6 +80,10 @@ impl From<Args> for Config {
 }
 
 fn main() {
+    if try_handle_version_request() {
+        return;
+    }
+
     let args = Args::parse();
     let stdin = io::stdin();
     let stdout = io::stdout();
@@ -101,4 +106,36 @@ fn main() {
             process::exit(1);
         }
     }
+}
+
+fn try_handle_version_request() -> bool {
+    let args: Vec<String> = env::args().skip(1).collect();
+
+    if is_version_json_request(&args) {
+        println!(
+            "{{\"package\":\"trunc\",\"binary\":\"trunc\",\"version\":\"{}\"}}",
+            env!("CARGO_PKG_VERSION")
+        );
+        return true;
+    }
+
+    if is_version_request(&args) {
+        println!("trunc {}", env!("CARGO_PKG_VERSION"));
+        return true;
+    }
+
+    false
+}
+
+fn is_version_request(args: &[String]) -> bool {
+    args.len() == 1 && matches!(args[0].as_str(), "--version" | "-V")
+}
+
+fn is_version_json_request(args: &[String]) -> bool {
+    args.iter()
+        .any(|arg| matches!(arg.as_str(), "--version" | "-V"))
+        && args.iter().any(|arg| arg == "--json")
+        && args
+            .iter()
+            .all(|arg| matches!(arg.as_str(), "--version" | "-V" | "--json"))
 }
