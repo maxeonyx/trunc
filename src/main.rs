@@ -113,7 +113,7 @@ fn try_handle_version_request() -> bool {
 
     if is_version_json_request(&args) {
         println!(
-            "{{\"package\":\"trunc\",\"binary\":\"trunc\",\"version\":\"{}\"}}",
+            "{{\"package\":\"broken-trunc\",\"binary\":\"trunc\",\"version\":\"{}\"}}",
             env!("CARGO_PKG_VERSION")
         );
         return true;
