@@ -67,6 +67,7 @@
     "trunc::e2e$streaming::short_input_interrupted_outputs_accumulated_lines_without_marker": "passing",
     "trunc::e2e$streaming::sigint_in_default_mode_flushes_tail_with_interruption_marker": "passing",
     "trunc::e2e$streaming::sigterm_in_pattern_mode_preserves_matches_and_flushes_tail": "passing",
+    "trunc::gatekeeper$tdd_ratchet_gatekeeper": "passing",
     "trunc::help_examples$help_examples": "passing",
     "trunc::informative_markers$framework_demo::failing_demo": "passing",
     "trunc::informative_markers$framework_demo::passing_demo": "passing",
@@ -96,6 +97,7 @@
     "trunc::informative_markers$pattern_informative_markers::total_includes_matches_past_cutoff": "passing",
     "trunc::informative_markers$pattern_informative_markers::transition_marker_jumps_to_first_recent_match_number": "passing",
     "trunc::informative_markers$pattern_informative_markers::zero_match_limit_reports_truncated_matches": "passing",
-    "trunc::informative_markers$pattern_informative_markers::zero_matches_found": "passing"
+    "trunc::informative_markers$pattern_informative_markers::zero_matches_found": "passing",
+    "trunc::version_json$version_json_flag_prints_machine_readable_version": "passing"
   }
 }
