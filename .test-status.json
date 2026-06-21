@@ -1,5 +1,6 @@
 {
   "$schema": "https://tdd-ratchet.maxeonyx.com/schema/test-status.v1.json",
+  "baseline": "996abbba4d1a27018438f4a564b6ea30c9e1d898",
   "tests": {
     "trunc::e2e$basic_truncation::empty_input_produces_empty_output": "passing",
     "trunc::e2e$basic_truncation::exactly_60_lines_passes_through_unchanged": "passing",
