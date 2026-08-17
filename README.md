@@ -132,10 +132,10 @@ If the input is interrupted before it grows beyond `first + last`, `trunc` just 
 
 With defaults, output is bounded to predictable sizes:
 
-| Mode    | Max Lines | Notes |
-| ------- | --------- | ----- |
-| Default | 61        | 30 first + 1 marker + 30 last |
-| Pattern | ~101      | 30 first + 5×(1 marker + 7 context) + 1 end marker + 30 last |
+| Mode | Max Lines | Notes |
+| --- | --- | --- |
+| Default | 61 | 30 first + 1 marker + 30 last |
+| Pattern | ~101 | 30 first + 5×(1 marker + 7 context) + 1 end marker + 30 last |
 
 These bounds apply to the portion of the stream actually received. If the producer is interrupted, `trunc` finalizes from the data seen so far.
 

@@ -83,7 +83,7 @@ The CI runs on every push to `main` (and manual dispatch). There is no PR trigge
 
 Releases happen automatically on every push to `main` — no manual tagging needed.
 
-**Version-bump enforcement:** The Check job reads `package.version` from `Cargo.toml` and checks if a `v{version}` tag already exists on a *different* commit. If so, CI fails — you must bump the version in `Cargo.toml` before pushing new commits. This ensures each version maps to exactly one commit.
+**Version-bump enforcement:** The Check job reads `package.version` from `Cargo.toml` and checks if a `v{version}` tag already exists on a _different_ commit. If so, CI fails — you must bump the version in `Cargo.toml` before pushing new commits. This ensures each version maps to exactly one commit.
 
 **Release creation:** The Release job uses an idempotent recreate strategy — it deletes any existing release/tag for the current version, then creates a fresh GitHub Release at HEAD with all built binaries. The `gh release create` command creates the git tag.
 
