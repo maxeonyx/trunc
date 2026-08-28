@@ -2,6 +2,10 @@
 
 This file contains instructions for AI agents working on this project. This tool is developed from the [agent-tools workspace](https://github.com/maxeonyx/agent-tools); clone and develop there, not from this repo directly.
 
+## TDD ratchet — read before testing
+
+Run `cargo ratchet`, not plain `cargo test`. A new test must be red when first introduced and committed as `pending`; that expected red test keeps CI green. A new test must not pass when first introduced—doing so makes the ratchet and CI red. Implement only after the red commit, then rerun the ratchet and commit the promotion to `passing`.
+
 ## Project Overview
 
 `trunc` is a Rust CLI tool for truncating pipe output. It shows the first N and last M lines, with an optional pattern-matching mode that extracts matches from the middle.
@@ -10,9 +14,9 @@ This file contains instructions for AI agents working on this project. This tool
 
 ```bash
 # Run tests
-cargo test
+cargo ratchet
 
-# Run a specific test
+# Run a specific test while debugging (the full ratchet remains the gate)
 cargo test test_name
 
 # Build release binary
