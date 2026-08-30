@@ -1,6 +1,6 @@
 [package]
 name = "trunc"
-version = "0.4.6"
+version = "0.4.7"
 edition = "2021"
 description = "Smart truncation for pipe output - like head+tail with grep-style pattern matching"
 license = "MIT"
@@ -9,13 +9,12 @@ keywords = ["cli", "head", "tail", "truncate", "pipe"]
 categories = ["command-line-utilities"]
 
 [dependencies]
-agent-tools-updater = { path = "../../crates/agent-tools-updater" }
 clap = { version = "4", features = ["derive"] }
 libc = "0.2"
 regex = "1"
 
 [dev-dependencies]
 assert_cmd = "2"
-help-test = { path = "../../crates/help-test" }
+help-test = { git = "https://github.com/maxeonyx/help-test", tag = "v0.1.0" }
 predicates = "3"
 serde_json = "1"
