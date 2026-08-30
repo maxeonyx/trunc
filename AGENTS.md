@@ -1,6 +1,7 @@
 # trunc - Agent Instructions
 
-This file contains instructions for AI agents working on this project. This tool is developed from the [agent-tools workspace](https://github.com/maxeonyx/agent-tools); clone and develop there, not from this repo directly.
+This repository is self-contained for development. A standalone clone must
+build, test, and release without an `agent-tools` checkout.
 
 ## TDD ratchet — read before testing
 
