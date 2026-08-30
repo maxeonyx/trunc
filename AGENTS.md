@@ -1,7 +1,6 @@
 # trunc - Agent Instructions
 
-This repository is self-contained for development. A standalone clone must
-build, test, and release without an `agent-tools` checkout.
+This repository is self-contained for development. A standalone clone must build, test, and release without an `agent-tools` checkout.
 
 ## TDD ratchet — read before testing
 
@@ -9,17 +8,13 @@ Run `cargo ratchet`, not plain `cargo test`. A new test must be red when first i
 
 ## Integration workflow
 
-Run `devenv test` before committing and pushing; it includes `actionlint`, so
-workflow syntax is checked offline. Source CI does not run on push. Open a pull
-request, merge current `main` into the feature branch, then explicitly dispatch:
+Run `devenv test` before committing and pushing; it includes `actionlint`, so workflow syntax is checked offline. Source CI does not run on push. Open a pull request, merge current `main` into the feature branch, then explicitly dispatch:
 
 ```bash
 gh workflow run ci.yml --ref <feature-branch> -f pr_number=<number>
 ```
 
-The repository-serialized run records the required `Ready` check, builds the
-release artifacts, auto-merges the pull request, publishes those same artifacts,
-and records `integrated-ci` on the exact merge commit.
+The repository-serialized run records the required `Ready` check, builds the release artifacts, auto-merges the pull request, publishes those same artifacts, and records `integrated-ci` on the exact merge commit.
 
 ## Project Overview
 
@@ -91,10 +86,7 @@ When implementing a task from `TODO.md` or a `TASK-*.ignore.md` file:
 
 ## CI Pipeline
 
-Source CI runs only when explicitly dispatched for an open pull request. It is
-serialized per repository, requires the branch to contain current `main`, and
-auto-merges only after the Ready and build jobs pass. Everything is in
-`.github/workflows/ci.yml`.
+Source CI runs only when explicitly dispatched for an open pull request. It is serialized per repository, requires the branch to contain current `main`, and auto-merges only after the Ready and build jobs pass. Everything is in `.github/workflows/ci.yml`.
 
 1. **Ready** - PR/base validation, actionlint, version enforcement, format, clippy, and the test ratchet
 2. **Build** - Linux and Windows release binaries from the validated PR head

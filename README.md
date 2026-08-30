@@ -2,13 +2,15 @@
 
 Smart truncation for pipe output. Like `head` + `tail` with optional grep-style pattern matching.
 
+**Site:** https://trunc.maxeonyx.com
+
 `trunc` accepts arbitrary piped bytes. It splits stdin on newlines and lossily decodes invalid UTF-8 so unexpected output does not fail the pipeline.
 
 ## Install
 
 ### Pre-built binaries
 
-Download the latest release from GitHub Releases: https://github.com/maxeonyx/trunc/releases/latest
+Download a pre-built binary from https://trunc.maxeonyx.com or browse the GitHub Releases at https://github.com/maxeonyx/trunc/releases/latest.
 
 Available binaries:
 
