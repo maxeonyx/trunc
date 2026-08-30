@@ -7,6 +7,20 @@ build, test, and release without an `agent-tools` checkout.
 
 Run `cargo ratchet`, not plain `cargo test`. A new test must be red when first introduced and committed as `pending`; that expected red test keeps CI green. A new test must not pass when first introduced—doing so makes the ratchet and CI red. Implement only after the red commit, then rerun the ratchet and commit the promotion to `passing`.
 
+## Integration workflow
+
+Run `devenv test` before committing and pushing; it includes `actionlint`, so
+workflow syntax is checked offline. Source CI does not run on push. Open a pull
+request, merge current `main` into the feature branch, then explicitly dispatch:
+
+```bash
+gh workflow run ci.yml --ref <feature-branch> -f pr_number=<number>
+```
+
+The repository-serialized run records the required `Ready` check, builds the
+release artifacts, auto-merges the pull request, publishes those same artifacts,
+and records `integrated-ci` on the exact merge commit.
+
 ## Project Overview
 
 `trunc` is a Rust CLI tool for truncating pipe output. It shows the first N and last M lines, with an optional pattern-matching mode that extracts matches from the middle.
@@ -77,22 +91,26 @@ When implementing a task from `TODO.md` or a `TASK-*.ignore.md` file:
 
 ## CI Pipeline
 
-The CI runs on every push to `main` (and manual dispatch). There is no PR trigger. Everything is in `.github/workflows/ci.yml`.
+Source CI runs only when explicitly dispatched for an open pull request. It is
+serialized per repository, requires the branch to contain current `main`, and
+auto-merges only after the Ready and build jobs pass. Everything is in
+`.github/workflows/ci.yml`.
 
-1. **Check** - Version-bump enforcement, `cargo fmt --check`, `cargo clippy`, `cargo test` (all tests)
-2. **Build** (depends on Check) - Cross-platform release binaries for 6 targets (Linux x86_64/x86_64-musl/aarch64, macOS x86_64/aarch64, Windows x86_64)
-3. **Release** (depends on Build) - Creates GitHub Release with all binaries (see below)
-4. **Pages** (depends on Build) - Deploys docs and release binaries to GitHub Pages
+1. **Ready** - PR/base validation, actionlint, version enforcement, format, clippy, and the test ratchet
+2. **Build** - Linux and Windows release binaries from the validated PR head
+3. **Merge** - Enables auto-merge and records the exact merge commit
+4. **Release and Pages** - Publishes the already-built artifacts from that same run
+5. **Integrated** - Records `integrated-ci` on the merge commit
 
 ## Release Pipeline
 
-Releases happen automatically on every push to `main` — no manual tagging needed.
+Releases happen automatically inside the explicitly dispatched integration run.
 
-**Version-bump enforcement:** The Check job reads `package.version` from `Cargo.toml` and checks if a `v{version}` tag already exists on a _different_ commit. If so, CI fails — you must bump the version in `Cargo.toml` before pushing new commits. This ensures each version maps to exactly one commit.
+**Version-bump enforcement:** The Ready job rejects any version whose release tag already exists. Bump `Cargo.toml`, `Cargo.lock`, and `docs/version.json` together before dispatching.
 
-**Release creation:** The Release job uses an idempotent recreate strategy — it deletes any existing release/tag for the current version, then creates a fresh GitHub Release at HEAD with all built binaries. The `gh release create` command creates the git tag.
+**Release creation:** The Release job creates a new tag at the merge commit and attaches the validated build artifacts.
 
-**Workflow:** Make changes → bump version in `Cargo.toml` → push → CI creates the release automatically.
+**Workflow:** Make changes → run `devenv test` → bump the version → open the PR → merge current main → dispatch CI.
 
 There is no crates.io publishing step.
 
