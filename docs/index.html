@@ -235,7 +235,7 @@ Compiling src/main.rs
 Compiling src/lib.rs
    Compiling dependency 4...
    Compiling dependency 5...
-<span class="truncated">[... truncated ...]</span>
+<span class="truncated">[... 90 lines truncated ...]</span>
    Compiling dependency 96...
 Linking...
 Optimizing...
@@ -245,7 +245,7 @@ Finished release build in 12.4s</div>
     <div class="commands">
       <div class="command">
         <code>some-command | trunc</code>
-        <p>Show first 10 and last 10 lines, truncate the middle.</p>
+        <p>Show first 30 and last 30 lines, truncate the middle.</p>
       </div>
       <div class="command">
         <code>some-command | trunc -f 5 -l 5</code>
@@ -283,7 +283,7 @@ Pipe long command output through `<span class="cmd">trunc</span>` to avoid flood
 <span class="cmd">chmod</span> +x ~/.local/bin/trunc
 
 <span class="comment"># Usage</span>
-<span class="cmd">some-command</span> | <span class="cmd">trunc</span>              <span class="comment"># First 10 + last 10 lines</span>
+<span class="cmd">some-command</span> | <span class="cmd">trunc</span>              <span class="comment"># First 30 + last 30 lines</span>
 <span class="cmd">some-command</span> | <span class="cmd">trunc</span> -f 5 -l 5   <span class="comment"># Custom counts</span>
 <span class="cmd">some-command</span> | <span class="cmd">trunc</span> "error"     <span class="comment"># Pattern mode</span></div>
 

@@ -15,10 +15,6 @@ Download a pre-built binary from https://trunc.maxeonyx.com or browse the GitHub
 Available binaries:
 
 - Linux x86_64: `trunc-x86_64-linux`
-- Linux x86_64-musl: `trunc-x86_64-linux-musl`
-- Linux aarch64: `trunc-aarch64-linux`
-- macOS x86_64: `trunc-x86_64-macos`
-- macOS aarch64: `trunc-aarch64-macos`
 - Windows x86_64: `trunc-x86_64-windows.exe`
 
 On Unix, make the downloaded binary executable and put it on your `PATH`.
@@ -97,7 +93,7 @@ line 100
 ### Pattern mode options
 
 ```bash
-trunc -m 10 "error"      # show up to 10 matches (default: 5)
+trunc -m 10 "error"      # show first and last 10 matches (default: 3 each)
 trunc -C 5 "error"       # 5 lines of context per match (default: 3)
 trunc -C 0 "error"       # no context, just matching lines
 ```
@@ -137,7 +133,7 @@ With defaults, output is bounded to predictable sizes:
 | Mode | Max Lines | Notes |
 | --- | --- | --- |
 | Default | 61 | 30 first + 1 marker + 30 last |
-| Pattern | ~101 | 30 first + 5×(1 marker + 7 context) + 1 end marker + 30 last |
+| Pattern | ~109 | 30 first + 6×(1 marker + 7-line match group) + 1 end marker + 30 last |
 
 These bounds apply to the portion of the stream actually received. If the producer is interrupted, `trunc` finalizes from the data seen so far.
 
