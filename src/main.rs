@@ -13,6 +13,7 @@ use std::process;
 use trunc::{run, Config, RunError, RunOutcome};
 
 const AFTER_HELP: &str = "Examples:\n  $ seq 1 100 | trunc\n  $ seq 1 100 | trunc --first 10 --last 20\n  $ printf '%s\\n' ok WARNING done | trunc WARNING\n  $ python3 -c \"print('x'*240); print('timeout after 30s'); print('y'*240)\" | trunc --width 20 timeout";
+const MAX_NUMERIC_LIMIT: usize = 1_000_000;
 
 /// Smart truncation for pipe output - like head+tail combined.
 ///
@@ -27,7 +28,8 @@ struct Args {
         long = "first",
         default_value = "30",
         visible_alias = "head",
-        short_alias = 'H'
+        short_alias = 'H',
+        value_parser = parse_numeric_limit
     )]
     first: usize,
 
@@ -37,32 +39,60 @@ struct Args {
         long = "last",
         default_value = "30",
         visible_alias = "tail",
-        short_alias = 'T'
+        short_alias = 'T',
+        value_parser = parse_numeric_limit
     )]
     last: usize,
 
     /// Shorthand: set both --match-first and --match-last
-    #[arg(short = 'm', long = "matches", default_value = "3")]
+    #[arg(
+        short = 'm',
+        long = "matches",
+        default_value = "3",
+        value_parser = parse_numeric_limit
+    )]
     matches: usize,
 
     /// Number of earliest matches to show in pattern mode (overrides --matches for the first side)
-    #[arg(long = "match-first")]
+    #[arg(long = "match-first", value_parser = parse_numeric_limit)]
     match_first: Option<usize>,
 
     /// Number of latest matches to show in pattern mode (overrides --matches for the last side)
-    #[arg(long = "match-last")]
+    #[arg(long = "match-last", value_parser = parse_numeric_limit)]
     match_last: Option<usize>,
 
     /// Lines of context around each match
-    #[arg(short = 'C', long = "context", default_value = "3")]
+    #[arg(
+        short = 'C',
+        long = "context",
+        default_value = "3",
+        value_parser = parse_numeric_limit
+    )]
     context: usize,
 
     /// Chars to show at start/end of long lines (0 = no limit)
-    #[arg(short = 'w', long = "width", default_value = "100")]
+    #[arg(
+        short = 'w',
+        long = "width",
+        default_value = "100",
+        value_parser = parse_numeric_limit
+    )]
     width: usize,
 
     /// Regex pattern to search for in the middle section
     pattern: Option<String>,
+}
+
+fn parse_numeric_limit(value: &str) -> Result<usize, String> {
+    let parsed = value
+        .parse::<usize>()
+        .map_err(|error| format!("expected a non-negative integer: {error}"))?;
+
+    if parsed > MAX_NUMERIC_LIMIT {
+        return Err(format!("maximum supported value is {MAX_NUMERIC_LIMIT}"));
+    }
+
+    Ok(parsed)
 }
 
 impl From<Args> for Config {

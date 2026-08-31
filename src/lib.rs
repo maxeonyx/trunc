@@ -265,7 +265,7 @@ impl MatchGroup {
         match_content: &str,
     ) -> Self {
         let start_line = match_line.saturating_sub(context_size);
-        let end_line = match_line + context_size;
+        let end_line = match_line.saturating_add(context_size);
 
         let mut lines = Vec::new();
         for (line_number, content) in leading_context {
@@ -314,10 +314,10 @@ impl Truncator {
             total_matches: 0,
             last_output_line: 0,
             match_output_ranges: Vec::new(),
-            tail_buffer: VecDeque::with_capacity(config.last + 1),
-            context_buffer: VecDeque::with_capacity(config.context + 1),
+            tail_buffer: VecDeque::new(),
+            context_buffer: VecDeque::new(),
             after_context_remaining: 0,
-            deferred_match_groups: VecDeque::with_capacity(config.match_last + 1),
+            deferred_match_groups: VecDeque::new(),
         })
     }
 
@@ -455,7 +455,7 @@ impl Truncator {
 
     fn lines_truncated_before_line(&self, line_number: usize) -> usize {
         let context_start = line_number;
-        let gap_start = self.last_output_line + 1;
+        let gap_start = self.last_output_line.saturating_add(1);
         let gap_end = context_start.max(gap_start);
         gap_end.saturating_sub(gap_start)
     }
@@ -514,11 +514,11 @@ impl Truncator {
         }
 
         let tail_start = if total_lines > self.last_count {
-            total_lines - self.last_count + 1
+            (total_lines - self.last_count).saturating_add(1)
         } else {
             1
         };
-        let needs_truncation = total_lines > self.first_count + self.last_count;
+        let needs_truncation = total_lines > self.first_count.saturating_add(self.last_count);
 
         if self.pattern.is_some() {
             self.finish_pattern_output(output, reason, tail_start, needs_truncation)?;
@@ -569,7 +569,7 @@ impl Truncator {
             .collect();
         let hidden_transition_matches = self
             .total_matches
-            .saturating_sub(self.streamed_match_count + tail_groups.len());
+            .saturating_sub(self.streamed_match_count.saturating_add(tail_groups.len()));
         let hidden_final_gap_matches = if tail_groups.is_empty() {
             self.total_matches.saturating_sub(self.streamed_match_count)
         } else {
@@ -638,7 +638,7 @@ impl Truncator {
     }
 
     fn lines_truncated_before_tail(&self, tail_start: usize) -> usize {
-        let gap_start = self.last_output_line + 1;
+        let gap_start = self.last_output_line.saturating_add(1);
         let gap_end = tail_start;
         gap_end.saturating_sub(gap_start)
     }
@@ -678,7 +678,7 @@ impl Truncator {
         let has_transition_marker = !tail_groups.is_empty()
             && self
                 .total_matches
-                .saturating_sub(self.streamed_match_count + tail_groups.len())
+                .saturating_sub(self.streamed_match_count.saturating_add(tail_groups.len()))
                 > 0;
 
         for (index, group) in tail_groups.iter().enumerate() {
@@ -730,7 +730,7 @@ impl Truncator {
 
     fn record_match_output(&mut self, line_number: usize) {
         if let Some((_, end)) = self.match_output_ranges.last_mut() {
-            if line_number == *end + 1 {
+            if line_number == end.saturating_add(1) {
                 *end = line_number;
                 return;
             }
@@ -756,7 +756,7 @@ fn truncate_line(line: &str, width: usize) -> String {
     }
 
     let char_count = line.chars().count();
-    let max_len = width * 2;
+    let max_len = width.saturating_mul(2);
 
     if char_count <= max_len {
         return line.to_string();
@@ -765,7 +765,7 @@ fn truncate_line(line: &str, width: usize) -> String {
     let removed = char_count - max_len;
     let marker = format!("[... {} chars ...]", removed);
 
-    let result_len = width + marker.len() + width;
+    let result_len = width.saturating_add(marker.len()).saturating_add(width);
     if result_len >= char_count {
         return line.to_string();
     }
