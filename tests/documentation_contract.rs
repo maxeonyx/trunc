@@ -5,7 +5,8 @@ use std::path::PathBuf;
 
 fn repository_file(path: &str) -> String {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(path);
-    fs::read_to_string(&path).unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()))
+    fs::read_to_string(&path)
+        .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()))
 }
 
 fn cli_help() -> String {

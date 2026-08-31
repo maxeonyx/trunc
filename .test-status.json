@@ -1,9 +1,9 @@
 {
   "$schema": "https://tdd-ratchet.maxeonyx.com/schema/test-status.v1.json",
   "tests": {
-    "trunc::documentation_contract$published_defaults_follow_cli_help": "pending",
-    "trunc::documentation_contract$readme_release_assets_follow_workflow": "pending",
-    "trunc::documentation_contract$site_demo_uses_a_counted_marker": "pending",
+    "trunc::documentation_contract$published_defaults_follow_cli_help": "passing",
+    "trunc::documentation_contract$readme_release_assets_follow_workflow": "passing",
+    "trunc::documentation_contract$site_demo_uses_a_counted_marker": "passing",
     "trunc::e2e$basic_truncation::empty_input_produces_empty_output": "passing",
     "trunc::e2e$basic_truncation::exactly_60_lines_passes_through_unchanged": "passing",
     "trunc::e2e$basic_truncation::handles_no_trailing_newline": "passing",
