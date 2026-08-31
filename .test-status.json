@@ -102,6 +102,7 @@
     "trunc::informative_markers$pattern_informative_markers::transition_marker_jumps_to_first_recent_match_number": "passing",
     "trunc::informative_markers$pattern_informative_markers::zero_match_limit_reports_truncated_matches": "passing",
     "trunc::informative_markers$pattern_informative_markers::zero_matches_found": "passing",
+    "trunc::numeric_limits$pathological_numeric_limits_are_rejected_before_reading_input": "passing",
     "trunc::version_json$version_json_flag_prints_machine_readable_version": "passing"
   }
 }
